@@ -8,9 +8,33 @@ import { PageHeader } from "@/components/shared/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { BookingStatusBadge } from "@/components/booking/BookingStatusBadge"
 import { formatCents, formatDateTime, formatPhone } from "@/lib/utils/format"
-import { ArrowLeft, Mail, Phone, Calendar, Shield } from "lucide-react"
+import { toast } from "sonner"
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  Shield,
+  UserCheck,
+  Loader2,
+} from "lucide-react"
 import type { Profile, Booking } from "@/types"
 
 export default function AdminCustomerDetailPage() {
@@ -18,6 +42,10 @@ export default function AdminCustomerDetailPage() {
   const [customer, setCustomer] = useState<Profile | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false)
+  const [newRole, setNewRole] = useState("")
+  const [newTrainerType, setNewTrainerType] = useState("")
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -38,11 +66,47 @@ export default function AdminCustomerDetailPage() {
         ])
 
       setCustomer(profile)
+      if (profile) {
+        setNewRole(profile.role)
+        setNewTrainerType(profile.trainer_type || "external")
+      }
       setBookings(customerBookings || [])
       setLoading(false)
     }
     load()
   }, [params.id])
+
+  const handleRoleChange = async () => {
+    if (!customer) return
+    setSaving(true)
+
+    const supabase = createClient()
+    const updates: Record<string, unknown> = { role: newRole }
+
+    if (newRole === "trainer") {
+      updates.trainer_type = newTrainerType
+    } else {
+      updates.trainer_type = null
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("id", customer.id)
+
+    if (error) {
+      toast.error("Failed to update role")
+    } else {
+      toast.success(`Role updated to ${newRole}${newRole === "trainer" ? ` (${newTrainerType})` : ""}`)
+      setCustomer({
+        ...customer,
+        role: newRole as Profile["role"],
+        trainer_type: newRole === "trainer" ? (newTrainerType as Profile["trainer_type"]) : null,
+      })
+      setRoleDialogOpen(false)
+    }
+    setSaving(false)
+  }
 
   if (loading) {
     return (
@@ -58,6 +122,13 @@ export default function AdminCustomerDetailPage() {
   const totalSpent = bookings
     .filter((b) => b.payment_status === "paid")
     .reduce((sum, b) => sum + b.total_cents, 0)
+
+  const roleBadgeColor: Record<string, string> = {
+    customer: "bg-text-secondary/10 text-text-secondary border-text-secondary/30",
+    trainer: "bg-brand-steel/10 text-brand-steel border-brand-steel/30",
+    staff: "bg-warning/10 text-warning border-warning/30",
+    admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
+  }
 
   return (
     <div className="max-w-3xl">
@@ -104,7 +175,7 @@ export default function AdminCustomerDetailPage() {
             Contact Info
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="space-y-3 text-sm">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-text-muted" />
             <span>{customer.email}</span>
@@ -115,9 +186,76 @@ export default function AdminCustomerDetailPage() {
               {customer.phone ? formatPhone(customer.phone) : "No phone"}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-text-muted" />
-            <span className="capitalize">{customer.role}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-text-muted" />
+              <Badge variant="outline" className={roleBadgeColor[customer.role] || ""}>
+                {customer.role}
+                {customer.role === "trainer" && customer.trainer_type && (
+                  <span className="ml-1">({customer.trainer_type.replace("_", "-")})</span>
+                )}
+              </Badge>
+            </div>
+            <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
+              <DialogTrigger>
+                <Button variant="outline" size="sm" className="border-border text-text-secondary text-xs">
+                  <UserCheck className="h-3 w-3 mr-1" />
+                  Change Role
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-bg-secondary border-border">
+                <DialogHeader>
+                  <DialogTitle className="font-display uppercase tracking-wide">
+                    Change User Role
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select value={newRole} onValueChange={(v) => v && setNewRole(v)}>
+                      <SelectTrigger className="bg-bg-elevated border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="customer">Customer</SelectItem>
+                        <SelectItem value="trainer">Trainer</SelectItem>
+                        <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {newRole === "trainer" && (
+                    <div className="space-y-2">
+                      <Label>Trainer Type</Label>
+                      <Select value={newTrainerType} onValueChange={(v) => v && setNewTrainerType(v)}>
+                        <SelectTrigger className="bg-bg-elevated border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="in_house">In-House (Net 30, no upfront payment)</SelectItem>
+                          <SelectItem value="external">External (pays at booking)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-text-muted">
+                        {newTrainerType === "in_house"
+                          ? "In-house trainers book without payment. Sessions are billed monthly."
+                          : "External trainers pay at the time of booking like regular customers."}
+                      </p>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleRoleChange}
+                    disabled={saving}
+                    className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
+                  >
+                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Role
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </CardContent>
       </Card>
