@@ -15,6 +15,7 @@ interface BookingFlowState {
   setStep: (step: number) => void
   setSelectedRate: (rate: Rate | null) => void
   setSelectedDate: (date: Date | null) => void
+  setSlots: (slots: { start: string; end: string }[]) => void
   toggleSlot: (slot: { start: string; end: string }) => void
   clearSlots: () => void
   setParticipantCount: (count: number) => void
@@ -43,6 +44,8 @@ export const useBookingStore = create<BookingFlowState>()((set, get) => ({
   setStep: (step) => set({ step }),
   setSelectedRate: (rate) => set({ selectedRate: rate, selectedSlots: [] }),
   setSelectedDate: (date) => set({ selectedDate: date, selectedSlots: [] }),
+
+  setSlots: (slots) => set({ selectedSlots: slots }),
 
   toggleSlot: (slot) =>
     set((state) => {

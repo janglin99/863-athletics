@@ -46,6 +46,7 @@ export default function BookPage() {
     selectedDate,
     setSelectedDate,
     selectedSlots,
+    setSlots,
     toggleSlot,
     clearSlots,
     participantCount,
@@ -336,7 +337,7 @@ export default function BookPage() {
                     <TimeSlotGrid
                       slots={daySlots}
                       selectedSlots={selectedSlots}
-                      onToggleSlot={toggleSlot}
+                      onSlotsChanged={setSlots}
                       maxSlots={selectedRate?.max_hours || 10}
                     />
 
