@@ -23,11 +23,11 @@ const robotoMono = Roboto_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "863 Athletics — Lakeland's Premier Training Facility",
+    default: "863 Athletics — Haines City's Premier Training Facility",
     template: "%s | 863 Athletics",
   },
   description:
-    "Book your training session at 863 Athletics. Premium gym access, expert trainers, and seamless booking in Lakeland, FL.",
+    "Book your training session at 863 Athletics. Premium gym access, expert trainers, and seamless booking in Haines City, FL.",
   openGraph: {
     title: "863 Athletics",
     description: "Train Harder. Book Smarter.",

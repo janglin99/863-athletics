@@ -176,9 +176,9 @@ export default function PrivacyPolicyPage() {
             </p>
             <div className="mt-2 bg-bg-secondary rounded-lg border border-border p-4">
               <p className="text-text-primary font-semibold">863 Athletics LLC</p>
-              <p>Lakeland, FL</p>
+              <p>2195 S 30th St, Haines City, FL 33844</p>
               <p>Email: <a href="mailto:863athletics@gmail.com" className="text-brand-orange hover:underline">863athletics@gmail.com</a></p>
-              <p>Phone: (863) 555-0863</p>
+              <p>Phone: (863) 521-9540</p>
             </div>
           </section>
         </div>

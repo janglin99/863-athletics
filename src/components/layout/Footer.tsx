@@ -15,21 +15,21 @@ export function Footer() {
               </span>
             </div>
             <p className="text-text-secondary text-sm max-w-sm">
-              Lakeland&apos;s premier training facility. Book your session,
+              Haines City&apos;s premier training facility. Book your session,
               get your access code, and train on your schedule.
             </p>
             <div className="flex flex-col gap-2 mt-4 text-sm text-text-secondary">
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span>Lakeland, FL</span>
+                <MapPin className="h-4 w-4 shrink-0" />
+                <span>2195 S 30th St, Haines City, FL 33844</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
-                <span>(863) 555-0863</span>
+                <span>(863) 521-9540</span>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                <span>info@863athletics.com</span>
+                <span>863athletics@gmail.com</span>
               </div>
             </div>
           </div>

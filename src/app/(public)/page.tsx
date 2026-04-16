@@ -86,7 +86,7 @@ export default function HomePage() {
             <span className="text-brand-orange">Book Smarter.</span>
           </h1>
           <p className="text-lg sm:text-xl text-text-secondary max-w-2xl mx-auto mb-10">
-            863 Athletics — Lakeland&apos;s premier training facility. Book your
+            863 Athletics — Haines City&apos;s premier training facility. Book your
             hour. Get your code. Walk in and work.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -330,7 +330,7 @@ export default function HomePage() {
               {
                 name: "Sarah T.",
                 quote:
-                  "Best gym in Lakeland. The trainers know their stuff and the equipment is top-notch.",
+                  "Best gym in Haines City. The trainers know their stuff and the equipment is top-notch.",
                 rating: 5,
               },
               {

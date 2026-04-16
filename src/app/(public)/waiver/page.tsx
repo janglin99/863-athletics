@@ -14,7 +14,7 @@ import { Loader2, FileText, CheckCircle } from "lucide-react"
 
 const WAIVER_TEXT = `ASSUMPTION OF RISK, WAIVER OF LIABILITY, AND INDEMNITY AGREEMENT
 
-863 Athletics — Lakeland, Florida
+863 Athletics — Haines City, Florida
 
 In consideration of being allowed to participate in any activities, use of equipment, services, and/or facilities at 863 Athletics ("the Facility"), I, the undersigned, acknowledge, appreciate, and agree that:
 

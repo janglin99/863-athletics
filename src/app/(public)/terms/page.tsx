@@ -20,7 +20,7 @@ export default function TermsPage() {
             </h2>
             <p>
               <strong className="text-text-primary">863 Athletics</strong> is a gym booking platform operated
-              by 863 Athletics LLC in Lakeland, Florida. Our platform allows customers to book training
+              by 863 Athletics LLC in Haines City, Florida. Our platform allows customers to book training
               sessions, receive facility access codes, and manage their bookings online at 863athletics.com.
             </p>
           </section>
@@ -114,7 +114,7 @@ export default function TermsPage() {
                 reply <strong className="text-white">&quot;HELP&quot;</strong> to any message, email us at{" "}
                 <a href="mailto:863athletics@gmail.com" className="text-brand-orange hover:underline">
                   863athletics@gmail.com
-                </a>, or call (863) 555-0863.
+                </a>, or call (863) 521-9540.
               </p>
               <p>
                 <strong className="text-text-primary">Supported Carriers:</strong> Compatible with all major US
@@ -189,9 +189,9 @@ export default function TermsPage() {
             </h2>
             <div className="bg-bg-secondary rounded-lg border border-border p-4">
               <p className="text-text-primary font-semibold">863 Athletics LLC</p>
-              <p>Lakeland, FL</p>
+              <p>2195 S 30th St, Haines City, FL 33844</p>
               <p>Email: <a href="mailto:863athletics@gmail.com" className="text-brand-orange hover:underline">863athletics@gmail.com</a></p>
-              <p>Phone: (863) 555-0863</p>
+              <p>Phone: (863) 521-9540</p>
               <p>Website: <a href="https://863athletics.com" className="text-brand-orange hover:underline">863athletics.com</a></p>
             </div>
           </section>

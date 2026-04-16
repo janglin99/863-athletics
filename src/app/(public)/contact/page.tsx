@@ -42,18 +42,18 @@ export default function ContactPage() {
               {
                 icon: MapPin,
                 title: "Location",
-                lines: ["Lakeland, FL", "Full address provided upon booking"],
+                lines: ["2195 S 30th St", "Haines City, FL 33844"],
               },
               {
                 icon: Phone,
                 title: "Phone",
-                lines: ["(863) 555-0863", "Mon-Fri 8am-8pm ET"],
+                lines: ["(863) 521-9540", "Mon-Fri 8am-8pm ET"],
               },
               {
                 icon: Mail,
                 title: "Email",
                 lines: [
-                  "info@863athletics.com",
+                  "863athletics@gmail.com",
                   "We respond within 24 hours",
                 ],
               },

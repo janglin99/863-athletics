@@ -31,7 +31,7 @@ export default function AboutPage() {
             {
               icon: Target,
               title: "Our Mission",
-              desc: "To provide Lakeland's most focused, efficient, and accessible training environment. Every decision we make — from equipment selection to scheduling — serves one goal: your progress.",
+              desc: "To provide Haines City's most focused, efficient, and accessible training environment. Every decision we make — from equipment selection to scheduling — serves one goal: your progress.",
             },
             {
               icon: Dumbbell,
