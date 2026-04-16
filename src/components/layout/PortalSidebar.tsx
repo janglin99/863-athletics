@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -10,6 +11,7 @@ import {
   User,
   LogOut,
   Dumbbell,
+  Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -25,6 +27,28 @@ const links = [
 export function PortalSidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    async function checkRole() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profile && ["admin", "staff"].includes(profile.role)) {
+        setIsAdmin(true)
+      }
+    }
+    checkRole()
+  }, [])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -62,13 +86,24 @@ export function PortalSidebar() {
         })}
       </nav>
 
-      <button
-        onClick={handleLogout}
-        className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-text-secondary hover:text-error hover:bg-bg-hover transition-colors"
-      >
-        <LogOut className="h-5 w-5" />
-        Log Out
-      </button>
+      <div className="border-t border-border pt-4 mt-4 space-y-1">
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+          >
+            <Shield className="h-5 w-5" />
+            Admin Portal
+          </Link>
+        )}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-text-secondary hover:text-error hover:bg-bg-hover transition-colors w-full text-left"
+        >
+          <LogOut className="h-5 w-5" />
+          Log Out
+        </button>
+      </div>
     </aside>
   )
 }

@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { useCartStore } from "@/store/cartStore"
 import { formatCents, formatTime, formatDate } from "@/lib/utils/format"
-import { ShoppingCart, Trash2, X } from "lucide-react"
+import { ShoppingCart, Trash2, X, Repeat } from "lucide-react"
 
 export function CartDrawer() {
   const { items, removeItem, getTotalCents, getItemCount } = useCartStore()
@@ -62,19 +62,38 @@ export function CartDrawer() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h4 className="font-semibold text-text-primary text-sm">
+                      <h4 className="font-semibold text-text-primary text-sm flex items-center gap-2">
                         {item.rateName}
+                        {item.isRecurring && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-brand-orange/10 text-brand-orange px-2 py-0.5 rounded">
+                            <Repeat className="h-3 w-3" />
+                            {item.slots.length} sessions
+                          </span>
+                        )}
                       </h4>
                       <div className="mt-2 space-y-1">
-                        {item.slots.map((slot, i) => (
-                          <p
-                            key={i}
-                            className="text-xs text-text-secondary font-mono"
-                          >
-                            {formatDate(slot.start)} ·{" "}
-                            {formatTime(slot.start)} - {formatTime(slot.end)}
-                          </p>
-                        ))}
+                        {item.isRecurring ? (
+                          <>
+                            <p className="text-xs text-text-secondary">
+                              {item.recurringConfig?.frequency} ·{" "}
+                              {item.slots.length} sessions
+                            </p>
+                            <p className="text-xs text-text-muted font-mono">
+                              {formatDate(item.slots[0].start)} —{" "}
+                              {formatDate(item.slots[item.slots.length - 1].start)}
+                            </p>
+                          </>
+                        ) : (
+                          item.slots.map((slot, i) => (
+                            <p
+                              key={i}
+                              className="text-xs text-text-secondary font-mono"
+                            >
+                              {formatDate(slot.start)} ·{" "}
+                              {formatTime(slot.start)} - {formatTime(slot.end)}
+                            </p>
+                          ))
+                        )}
                       </div>
                       {item.participantCount > 1 && (
                         <p className="text-xs text-text-muted mt-1">

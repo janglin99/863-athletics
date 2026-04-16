@@ -7,6 +7,11 @@ import { useBookingStore } from "@/store/bookingStore"
 import { useCartStore } from "@/store/cartStore"
 import { RateSelector } from "@/components/booking/RateSelector"
 import { TimeSlotGrid } from "@/components/booking/TimeSlotGrid"
+import {
+  RecurringOptions,
+  getRecurringDates,
+  type RecurringConfig,
+} from "@/components/booking/RecurringOptions"
 import { CartDrawer } from "@/components/cart/CartDrawer"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
@@ -14,15 +19,23 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCents } from "@/lib/utils/format"
-import { format, addDays } from "date-fns"
+import { format, addDays, addWeeks } from "date-fns"
 import { toast } from "sonner"
 import {
   ArrowLeft,
-  ArrowRight,
   ShoppingCart,
   CheckCircle,
 } from "lucide-react"
 import type { Rate, TimeSlot, AvailabilityMap } from "@/types"
+
+const defaultRecurringConfig: RecurringConfig = {
+  enabled: false,
+  frequency: "weekly",
+  daysOfWeek: [],
+  startDate: new Date(),
+  endDate: addWeeks(new Date(), 4),
+  timeSlots: [],
+}
 
 export default function BookPage() {
   const {
@@ -46,6 +59,9 @@ export default function BookPage() {
   const [rateFilter, setRateFilter] = useState("all")
   const [loadingRates, setLoadingRates] = useState(true)
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [recurringConfig, setRecurringConfig] = useState<RecurringConfig>(
+    defaultRecurringConfig
+  )
 
   useEffect(() => {
     async function fetchRates() {
@@ -65,7 +81,7 @@ export default function BookPage() {
   const fetchAvailability = useCallback(async () => {
     setLoadingSlots(true)
     const start = new Date().toISOString()
-    const end = addDays(new Date(), 60).toISOString()
+    const end = addDays(new Date(), 90).toISOString()
     const res = await fetch(`/api/availability?start=${start}&end=${end}`)
     const data = await res.json()
     setAvailability(data.availability || {})
@@ -78,6 +94,7 @@ export default function BookPage() {
     }
   }, [step, fetchAvailability])
 
+  // Single booking: add to cart
   const handleAddToCart = () => {
     if (!selectedRate || selectedSlots.length === 0) return
 
@@ -96,8 +113,61 @@ export default function BookPage() {
     clearSlots()
   }
 
+  // Recurring booking: add all sessions to cart
+  const handleAddRecurringToCart = () => {
+    if (!selectedRate) return
+    if (recurringConfig.daysOfWeek.length === 0) {
+      toast.error("Select at least one day of the week")
+      return
+    }
+    if (recurringConfig.timeSlots.length === 0) {
+      toast.error("Select at least one time slot")
+      return
+    }
+
+    const dates = getRecurringDates(recurringConfig)
+    if (dates.length === 0) {
+      toast.error("No dates found in the selected range")
+      return
+    }
+
+    // Build slots for each recurring date
+    const allSlots = dates.flatMap((date) =>
+      recurringConfig.timeSlots.map((ts) => {
+        const start = new Date(date)
+        start.setHours(ts.hour, 0, 0, 0)
+        const end = new Date(start)
+        end.setHours(ts.hour + 1, 0, 0, 0)
+        return { start: start.toISOString(), end: end.toISOString() }
+      })
+    )
+
+    addItem({
+      rateId: selectedRate.id,
+      rateName: selectedRate.name,
+      rateType: selectedRate.type,
+      priceCents: selectedRate.price_cents,
+      pricePerUnit: selectedRate.per_unit,
+      slots: allSlots,
+      participantCount,
+      isRecurring: true,
+      recurringConfig: {
+        frequency: recurringConfig.frequency,
+        daysOfWeek: recurringConfig.daysOfWeek,
+        endDate: recurringConfig.endDate.toISOString(),
+      },
+    })
+
+    toast.success(
+      `Added ${dates.length} recurring sessions to cart!`
+    )
+    setRecurringConfig(defaultRecurringConfig)
+  }
+
   const dateKey = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null
-  const daySlots: TimeSlot[] = dateKey ? availability[dateKey]?.slots || [] : []
+  const daySlots: TimeSlot[] = dateKey
+    ? availability[dateKey]?.slots || []
+    : []
 
   const estimatedTotal =
     selectedRate && selectedSlots.length > 0
@@ -185,7 +255,10 @@ export default function BookPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setStep(1)}
+            onClick={() => {
+              setStep(1)
+              setRecurringConfig(defaultRecurringConfig)
+            }}
             className="text-text-secondary"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -201,70 +274,96 @@ export default function BookPage() {
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
-            <div>
-              <Calendar
-                mode="single"
-                selected={selectedDate || undefined}
-                onSelect={(date) => date && setSelectedDate(date)}
-                disabled={(date) => date < new Date()}
-                className="rounded-lg border border-border bg-bg-secondary"
-              />
-            </div>
+          {/* Recurring Options */}
+          <RecurringOptions
+            config={recurringConfig}
+            onChange={setRecurringConfig}
+            priceCentsPerHour={selectedRate?.price_cents || 0}
+            availability={availability}
+          />
 
-            <div>
-              {!selectedDate && (
-                <p className="text-text-secondary text-sm py-8 text-center">
-                  Select a date to see available time slots
-                </p>
-              )}
+          {/* Recurring: Add to cart button */}
+          {recurringConfig.enabled &&
+            recurringConfig.daysOfWeek.length > 0 &&
+            recurringConfig.timeSlots.length > 0 && (
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleAddRecurringToCart}
+                  className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
+                >
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Add Recurring Sessions to Cart
+                </Button>
+              </div>
+            )}
 
-              {selectedDate && loadingSlots && (
-                <div className="space-y-2">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <Skeleton
-                      key={i}
-                      className="h-10 w-20 bg-bg-elevated rounded inline-block mr-2"
+          {/* Single booking: Calendar + Slots */}
+          {!recurringConfig.enabled && (
+            <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
+              <div>
+                <Calendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  disabled={(date) => date < new Date()}
+                  className="rounded-lg border border-border bg-bg-secondary"
+                />
+              </div>
+
+              <div>
+                {!selectedDate && (
+                  <p className="text-text-secondary text-sm py-8 text-center">
+                    Select a date to see available time slots
+                  </p>
+                )}
+
+                {selectedDate && loadingSlots && (
+                  <div className="space-y-2">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <Skeleton
+                        key={i}
+                        className="h-10 w-20 bg-bg-elevated rounded inline-block mr-2"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {selectedDate && !loadingSlots && (
+                  <div className="space-y-4">
+                    <h3 className="font-display font-bold uppercase tracking-wide">
+                      {format(selectedDate, "EEEE, MMMM d")}
+                    </h3>
+                    <TimeSlotGrid
+                      slots={daySlots}
+                      selectedSlots={selectedSlots}
+                      onToggleSlot={toggleSlot}
+                      maxSlots={selectedRate?.max_hours || 10}
                     />
-                  ))}
-                </div>
-              )}
 
-              {selectedDate && !loadingSlots && (
-                <div className="space-y-4">
-                  <h3 className="font-display font-bold uppercase tracking-wide">
-                    {format(selectedDate, "EEEE, MMMM d")}
-                  </h3>
-                  <TimeSlotGrid
-                    slots={daySlots}
-                    selectedSlots={selectedSlots}
-                    onToggleSlot={toggleSlot}
-                    maxSlots={selectedRate?.max_hours || 10}
-                  />
-
-                  {selectedSlots.length > 0 && (
-                    <div className="flex items-center justify-between bg-bg-secondary rounded-lg border border-brand-orange/30 p-4">
-                      <div>
-                        <p className="text-sm text-text-secondary">
-                          {selectedSlots.length} hour(s) selected
-                        </p>
-                        <p className="text-xl font-display font-bold text-brand-orange">
-                          {formatCents(estimatedTotal)}
-                        </p>
+                    {selectedSlots.length > 0 && (
+                      <div className="flex items-center justify-between bg-bg-secondary rounded-lg border border-brand-orange/30 p-4">
+                        <div>
+                          <p className="text-sm text-text-secondary">
+                            {selectedSlots.length} hour(s) selected
+                          </p>
+                          <p className="text-xl font-display font-bold text-brand-orange">
+                            {formatCents(estimatedTotal)}
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleAddToCart}
+                          className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
+                        >
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                          Add to Cart
+                        </Button>
                       </div>
-                      <Button
-                        onClick={handleAddToCart}
-                        className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
-                      >
-                        <ShoppingCart className="mr-2 h-4 w-4" />
-                        Add to Cart
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
