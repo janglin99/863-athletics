@@ -18,8 +18,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { formatCents, formatTime, formatDate } from "@/lib/utils/format"
 import { toast } from "sonner"
-import { ArrowLeft, Loader2, CreditCard, Smartphone } from "lucide-react"
+import { ArrowLeft, Loader2, CreditCard, Smartphone, ClipboardCheck } from "lucide-react"
 import Link from "next/link"
+import { createClient } from "@/lib/supabase/client"
 
 export default function CheckoutPage() {
   const { items, getTotalCents, clearCart } = useCartStore()
@@ -32,6 +33,24 @@ export default function CheckoutPage() {
   const [bookingId, setBookingId] = useState<string | null>(null)
   const [bookingNumber, setBookingNumber] = useState<string>("")
   const [loading, setLoading] = useState(false)
+  const [isInHouseTrainer, setIsInHouseTrainer] = useState(false)
+
+  useEffect(() => {
+    async function checkTrainerStatus() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, trainer_type")
+        .eq("id", user.id)
+        .single()
+      if (profile?.role === "trainer" && profile?.trainer_type === "in_house") {
+        setIsInHouseTrainer(true)
+      }
+    }
+    checkTrainerStatus()
+  }, [])
 
   const total = getTotalCents()
 
@@ -95,6 +114,15 @@ export default function CheckoutPage() {
 
     setClientSecret(data.clientSecret)
     setLoading(false)
+  }
+
+  const handleTrainerBooking = async () => {
+    const booking = await createBooking("trainer_account")
+    if (!booking) return
+
+    toast.success("Booking confirmed! Added to your monthly billing.")
+    clearCart()
+    router.push(`/book/confirmation?booking=${booking.booking_number}`)
   }
 
   const handleManualPaymentSent = async () => {
@@ -193,76 +221,102 @@ export default function CheckoutPage() {
       </div>
 
       {/* Payment Method */}
-      <Tabs value={paymentMethod} onValueChange={setPaymentMethod}>
-        <TabsList className="bg-bg-secondary w-full">
-          <TabsTrigger value="stripe" className="flex-1">
-            <CreditCard className="h-4 w-4 mr-2" />
-            Card / Apple Pay
-          </TabsTrigger>
-          <TabsTrigger value="zelle" className="flex-1">
-            Zelle
-          </TabsTrigger>
-          <TabsTrigger value="cash_app" className="flex-1">
-            <Smartphone className="h-4 w-4 mr-2" />
-            Cash App
-          </TabsTrigger>
-        </TabsList>
+      {isInHouseTrainer ? (
+        <div className="bg-bg-secondary rounded-lg border border-border p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <ClipboardCheck className="h-6 w-6 text-green-500" />
+            <h3 className="font-display font-bold uppercase tracking-wide">
+              Trainer Account
+            </h3>
+          </div>
+          <p className="text-sm text-text-secondary mb-6">
+            This session will be added to your monthly billing. No payment required now.
+          </p>
+          <Button
+            onClick={handleTrainerBooking}
+            disabled={loading || !waiverConfirmed}
+            className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-6"
+          >
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ClipboardCheck className="mr-2 h-4 w-4" />
+            )}
+            Confirm Booking
+          </Button>
+        </div>
+      ) : (
+        <Tabs value={paymentMethod} onValueChange={setPaymentMethod}>
+          <TabsList className="bg-bg-secondary w-full">
+            <TabsTrigger value="stripe" className="flex-1">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Card / Apple Pay
+            </TabsTrigger>
+            <TabsTrigger value="zelle" className="flex-1">
+              Zelle
+            </TabsTrigger>
+            <TabsTrigger value="cash_app" className="flex-1">
+              <Smartphone className="h-4 w-4 mr-2" />
+              Cash App
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="stripe" className="mt-6">
-          {clientSecret ? (
-            <Elements
-              stripe={getStripe()}
-              options={{
-                clientSecret,
-                appearance: stripeAppearance,
-              }}
-            >
-              <StripePaymentForm
-                onSuccess={() => {
-                  clearCart()
-                  router.push(
-                    `/book/confirmation?booking=${bookingNumber}`
-                  )
+          <TabsContent value="stripe" className="mt-6">
+            {clientSecret ? (
+              <Elements
+                stripe={getStripe()}
+                options={{
+                  clientSecret,
+                  appearance: stripeAppearance,
                 }}
-                bookingNumber={bookingNumber}
-              />
-            </Elements>
-          ) : (
-            <Button
-              onClick={handleStripeCheckout}
-              disabled={loading || !waiverConfirmed}
-              className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-6"
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="mr-2 h-4 w-4" />
-              )}
-              Pay {formatCents(total)}
-            </Button>
-          )}
-        </TabsContent>
+              >
+                <StripePaymentForm
+                  onSuccess={() => {
+                    clearCart()
+                    router.push(
+                      `/book/confirmation?booking=${bookingNumber}`
+                    )
+                  }}
+                  bookingNumber={bookingNumber}
+                />
+              </Elements>
+            ) : (
+              <Button
+                onClick={handleStripeCheckout}
+                disabled={loading || !waiverConfirmed}
+                className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-6"
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CreditCard className="mr-2 h-4 w-4" />
+                )}
+                Pay {formatCents(total)}
+              </Button>
+            )}
+          </TabsContent>
 
-        <TabsContent value="zelle" className="mt-6">
-          <ManualPaymentInstructions
-            method="zelle"
-            amount={total}
-            bookingNumber={bookingNumber || "BK------"}
-            onConfirmSent={handleManualPaymentSent}
-            loading={loading}
-          />
-        </TabsContent>
+          <TabsContent value="zelle" className="mt-6">
+            <ManualPaymentInstructions
+              method="zelle"
+              amount={total}
+              bookingNumber={bookingNumber || "BK------"}
+              onConfirmSent={handleManualPaymentSent}
+              loading={loading}
+            />
+          </TabsContent>
 
-        <TabsContent value="cash_app" className="mt-6">
-          <ManualPaymentInstructions
-            method="cash_app"
-            amount={total}
-            bookingNumber={bookingNumber || "BK------"}
-            onConfirmSent={handleManualPaymentSent}
-            loading={loading}
-          />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="cash_app" className="mt-6">
+            <ManualPaymentInstructions
+              method="cash_app"
+              amount={total}
+              bookingNumber={bookingNumber || "BK------"}
+              onConfirmSent={handleManualPaymentSent}
+              loading={loading}
+            />
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   )
 }

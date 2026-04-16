@@ -23,6 +23,7 @@ const createBookingSchema = z.object({
     "zelle",
     "cash_app",
     "cash",
+    "trainer_account",
   ]),
   isRecurring: z.boolean().default(false),
   recurringPattern: z
@@ -129,6 +130,27 @@ export async function POST(req: NextRequest) {
       .from("bookings")
       .update({ payment_status: "pending_manual" })
       .eq("id", booking.id)
+  }
+
+  // In-house trainers skip payment — auto-confirm booking
+  if (data.paymentMethod === "trainer_account") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, trainer_type")
+      .eq("id", user.id)
+      .single()
+
+    if (profile?.role === "trainer" && profile?.trainer_type === "in_house") {
+      await supabase
+        .from("bookings")
+        .update({
+          status: "confirmed",
+          payment_status: "paid",
+          payment_method: "trainer_account",
+          confirmed_at: new Date().toISOString(),
+        })
+        .eq("id", booking.id)
+    }
   }
 
   return NextResponse.json(

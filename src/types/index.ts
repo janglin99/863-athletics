@@ -18,8 +18,28 @@ export interface Profile {
   notification_email: boolean
   notification_sms: boolean
   notification_reminders: boolean
+  trainer_type: "in_house" | "external" | null
+  facility_rate_cents: number | null
+  commission_rate: number | null
+  commission_type: "percentage" | "flat_per_session" | "flat_monthly" | null
   created_at: string
   updated_at: string
+}
+
+export interface TrainerInvoice {
+  id: string
+  trainer_id: string
+  month: number
+  year: number
+  total_sessions: number
+  total_hours: number
+  total_amount_cents: number
+  status: "pending" | "invoiced" | "paid"
+  notes: string | null
+  paid_at: string | null
+  created_at: string
+  updated_at: string
+  trainer?: Profile
 }
 
 export interface Rate {

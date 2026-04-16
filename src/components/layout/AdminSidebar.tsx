@@ -15,6 +15,7 @@ import {
   Settings,
   LogOut,
   Shield,
+  UserCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -23,6 +24,7 @@ const links = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/bookings", label: "All Bookings", icon: ClipboardList },
   { href: "/admin/customers", label: "Customers", icon: Users },
+  { href: "/admin/trainers", label: "Trainers", icon: UserCheck },
   { href: "/admin/availability", label: "Availability", icon: Calendar },
   { href: "/admin/rates", label: "Rates & Pricing", icon: Settings },
   { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag },
