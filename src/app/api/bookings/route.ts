@@ -1,0 +1,169 @@
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { z } from "zod"
+
+const createBookingSchema = z.object({
+  rateId: z.string().uuid(),
+  trainerId: z.string().uuid().optional(),
+  slots: z
+    .array(
+      z.object({
+        start: z.string().datetime(),
+        end: z.string().datetime(),
+      })
+    )
+    .min(1)
+    .max(10),
+  participantCount: z.number().min(1).max(30).default(1),
+  notes: z.string().max(500).optional(),
+  paymentMethod: z.enum([
+    "stripe_card",
+    "stripe_apple_pay",
+    "stripe_google_pay",
+    "zelle",
+    "cash_app",
+    "cash",
+  ]),
+  isRecurring: z.boolean().default(false),
+  recurringPattern: z
+    .object({
+      frequency: z.enum(["weekly", "biweekly"]),
+      daysOfWeek: z.array(z.number()),
+      endDate: z.string().datetime(),
+    })
+    .optional(),
+  waiverConfirmed: z.boolean(),
+})
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const body = await req.json()
+  const parsed = createBookingSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.errors }, { status: 400 })
+  }
+
+  const data = parsed.data
+
+  const { data: rate } = await supabase
+    .from("rates")
+    .select("*")
+    .eq("id", data.rateId)
+    .single()
+
+  if (!rate)
+    return NextResponse.json({ error: "Rate not found" }, { status: 404 })
+
+  if (!data.waiverConfirmed) {
+    return NextResponse.json(
+      { error: "Waiver must be confirmed" },
+      { status: 400 }
+    )
+  }
+
+  // Calculate total
+  const totalHours = data.slots.length
+  let totalCents = rate.price_cents
+
+  if (rate.per_unit === "hour") {
+    totalCents = rate.price_cents * totalHours
+  } else if (rate.per_unit === "person") {
+    totalCents = rate.price_cents * data.participantCount * totalHours
+  }
+
+  const { data: booking, error: bookingError } = await supabase
+    .from("bookings")
+    .insert({
+      customer_id: user.id,
+      trainer_id: data.trainerId || null,
+      rate_id: data.rateId,
+      status: "pending_payment",
+      payment_status: "unpaid",
+      payment_method: data.paymentMethod,
+      subtotal_cents: totalCents,
+      total_cents: totalCents,
+      participant_count: data.participantCount,
+      notes: data.notes,
+      is_recurring: data.isRecurring,
+      recurring_pattern: data.recurringPattern || null,
+      waiver_confirmed: data.waiverConfirmed,
+    })
+    .select()
+    .single()
+
+  if (bookingError) {
+    return NextResponse.json(
+      { error: bookingError.message },
+      { status: 500 }
+    )
+  }
+
+  const slotsData = data.slots.map((slot) => ({
+    booking_id: booking.id,
+    start_time: slot.start,
+    end_time: slot.end,
+    status: "scheduled",
+  }))
+
+  const { error: slotsError } = await supabase
+    .from("booking_slots")
+    .insert(slotsData)
+
+  if (slotsError) {
+    await supabase.from("bookings").delete().eq("id", booking.id)
+    return NextResponse.json(
+      { error: "Failed to create time slots — they may be taken" },
+      { status: 409 }
+    )
+  }
+
+  if (["zelle", "cash_app", "cash"].includes(data.paymentMethod)) {
+    await supabase
+      .from("bookings")
+      .update({ payment_status: "pending_manual" })
+      .eq("id", booking.id)
+  }
+
+  return NextResponse.json(
+    { booking: { ...booking, slots: slotsData }, message: "Booking created" },
+    { status: 201 }
+  )
+}
+
+export async function GET(req: NextRequest) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const status = searchParams.get("status")
+
+  let query = supabase
+    .from("bookings")
+    .select("*, rate:rates(*), slots:booking_slots(*)")
+    .eq("customer_id", user.id)
+    .order("created_at", { ascending: false })
+
+  if (status) {
+    query = query.eq("status", status)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ bookings: data })
+}
