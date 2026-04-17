@@ -15,7 +15,6 @@ import {
 import { CartDrawer } from "@/components/cart/CartDrawer"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCents } from "@/lib/utils/format"
@@ -57,7 +56,7 @@ export default function BookPage() {
 
   const [rates, setRates] = useState<Rate[]>([])
   const [availability, setAvailability] = useState<AvailabilityMap>({})
-  const [rateFilter, setRateFilter] = useState("all")
+  const [rateFilter, setRateFilter] = useState("")
   const [loadingRates, setLoadingRates] = useState(true)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [recurringConfig, setRecurringConfig] = useState<RecurringConfig>(
@@ -217,19 +216,6 @@ export default function BookPage() {
       {/* Step 1: Select Rate */}
       {step === 1 && (
         <div className="space-y-6">
-          <Tabs
-            value={rateFilter}
-            onValueChange={setRateFilter}
-            className="w-full"
-          >
-            <TabsList className="bg-bg-secondary">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="open_gym">Open Gym</TabsTrigger>
-              <TabsTrigger value="training">Training</TabsTrigger>
-              <TabsTrigger value="packages">Packages</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
           {loadingRates ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -244,7 +230,7 @@ export default function BookPage() {
                 setSelectedRate(rate)
                 setStep(2)
               }}
-              filter={rateFilter === "all" ? undefined : rateFilter}
+              filter={rateFilter || undefined}
             />
           )}
         </div>

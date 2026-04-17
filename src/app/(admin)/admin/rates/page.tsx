@@ -31,20 +31,6 @@ import { DollarSign, Plus, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import type { Rate } from "@/types"
 
-const RATE_TYPES = [
-  { value: "drop_in_1hr", label: "Drop-in (1hr)" },
-  { value: "drop_in_multi", label: "Drop-in (Multi)" },
-  { value: "day_pass", label: "Day Pass" },
-  { value: "trainer_private", label: "Trainer (Private)" },
-  { value: "trainer_group_small", label: "Trainer (Small Group)" },
-  { value: "trainer_group_large", label: "Trainer (Large Group)" },
-  { value: "membership_monthly", label: "Membership (Monthly)" },
-  { value: "pack_5", label: "5-Pack" },
-  { value: "pack_10", label: "10-Pack" },
-  { value: "staff_access", label: "Staff Access" },
-  { value: "event", label: "Event" },
-]
-
 const PER_UNIT_OPTIONS = [
   { value: "session", label: "Session" },
   { value: "hour", label: "Hour" },
@@ -420,18 +406,15 @@ export default function AdminRatesPage() {
                 <Label className="text-text-secondary text-xs uppercase tracking-wide">
                   Type
                 </Label>
-                <Select value={form.type} onValueChange={(val) => val && updateField("type", val)}>
-                  <SelectTrigger className="w-full bg-bg-elevated border-border text-text-primary">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-bg-elevated border-border">
-                    {RATE_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value} className="text-text-primary">
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value={form.type}
+                  onChange={(e) => updateField("type", e.target.value.toLowerCase().replace(/\s+/g, "_"))}
+                  placeholder="e.g. gym_rental, training_private"
+                  className="bg-bg-elevated border-border text-text-primary"
+                />
+                <p className="text-xs text-text-muted">
+                  Used for categorization. Use snake_case (e.g. gym_rental)
+                </p>
               </div>
 
               <div className="grid gap-1.5">

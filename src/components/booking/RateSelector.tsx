@@ -40,19 +40,7 @@ export function RateSelector({
   filter,
 }: RateSelectorProps) {
   const filteredRates = filter
-    ? rates.filter((r) => {
-        if (filter === "open_gym")
-          return ["drop_in_1hr", "drop_in_multi", "day_pass"].includes(r.type)
-        if (filter === "training")
-          return [
-            "trainer_private",
-            "trainer_group_small",
-            "trainer_group_large",
-          ].includes(r.type)
-        if (filter === "packages")
-          return ["pack_5", "pack_10", "membership_monthly"].includes(r.type)
-        return true
-      })
+    ? rates.filter((r) => r.type.toLowerCase().includes(filter.toLowerCase()))
     : rates
 
   return (
