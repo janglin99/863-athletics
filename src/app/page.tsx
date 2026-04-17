@@ -273,11 +273,11 @@ export default function HomePage() {
           <p className="text-text-secondary text-center mb-16 max-w-lg mx-auto">
             No hidden fees. No long-term contracts. Pay for what you use.
           </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="flex flex-wrap justify-center gap-6">
             {rates.map((rate, i) => (
               <div
                 key={rate.id}
-                className={`bg-bg-secondary border border-border rounded-lg p-6 pt-8 text-center relative ${
+                className={`bg-bg-secondary border border-border rounded-lg p-6 pt-8 text-center relative w-full sm:w-56 ${
                   i === 0 ? "border-brand-orange ring-1 ring-brand-orange/30" : ""
                 }`}
               >
