@@ -1,0 +1,6 @@
+<svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" rx="36" fill="#080809"/>
+  <text x="90" y="75" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="64" fill="#FF4700">863</text>
+  <text x="90" y="125" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="24" fill="#F5F5F7" letter-spacing="4">ATHLETICS</text>
+  <rect x="28" y="138" width="124" height="2" rx="1" fill="#FF4700"/>
+</svg>

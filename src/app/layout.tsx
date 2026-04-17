@@ -28,11 +28,18 @@ export const metadata: Metadata = {
   },
   description:
     "Book your training session at 863 Athletics. Premium gym access, expert trainers, and seamless booking in Haines City, FL.",
+  metadataBase: new URL("https://863athletics.com"),
   openGraph: {
     title: "863 Athletics",
     description: "Train Harder. Book Smarter.",
     siteName: "863 Athletics",
     type: "website",
+    url: "https://863athletics.com",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "863 Athletics",
+    description: "Train Harder. Book Smarter.",
   },
 }
 
