@@ -5,6 +5,9 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Navbar } from "@/components/layout/Navbar"
 import { Footer } from "@/components/layout/Footer"
+import { createClient } from "@/lib/supabase/client"
+import { formatCents } from "@/lib/utils/format"
+import type { Rate } from "@/types"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Calendar,
@@ -71,6 +74,22 @@ function AnimatedCounter({
 }
 
 export default function HomePage() {
+  const [rates, setRates] = useState<Rate[]>([])
+
+  useEffect(() => {
+    async function fetchRates() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("rates")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order")
+        .limit(4)
+      setRates(data || [])
+    }
+    fetchRates()
+  }, [])
+
   return (
     <>
     <Navbar />
@@ -165,23 +184,21 @@ export default function HomePage() {
                 desc: "Receive a unique access code via text and email. Walk in and start training.",
               },
             ].map((item) => (
-              <Card
+              <div
                 key={item.step}
-                className="bg-bg-secondary border-border text-center relative group hover:border-brand-orange/50 transition-all"
+                className="bg-bg-secondary border border-border rounded-lg text-center p-6 pt-10 relative group hover:border-brand-orange/50 transition-all overflow-hidden"
               >
-                <CardContent className="pt-8 pb-6">
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 h-8 w-8 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold text-sm">
-                    {item.step}
-                  </div>
-                  <div className="rounded-full bg-brand-orange/10 p-4 mx-auto w-fit mb-4 mt-2">
-                    <item.icon className="h-8 w-8 text-brand-orange" />
-                  </div>
-                  <h3 className="text-xl font-display font-bold uppercase tracking-wide mb-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-text-secondary text-sm">{item.desc}</p>
-                </CardContent>
-              </Card>
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-8 w-8 rounded-b-lg bg-brand-orange text-white flex items-center justify-center font-bold text-sm">
+                  {item.step}
+                </div>
+                <div className="rounded-full bg-brand-orange/10 p-4 mx-auto w-fit mb-4">
+                  <item.icon className="h-8 w-8 text-brand-orange" />
+                </div>
+                <h3 className="text-xl font-display font-bold uppercase tracking-wide mb-2">
+                  {item.title}
+                </h3>
+                <p className="text-text-secondary text-sm">{item.desc}</p>
+              </div>
             ))}
           </div>
         </div>
@@ -197,13 +214,13 @@ export default function HomePage() {
             {[
               {
                 icon: Dumbbell,
-                title: "Premium Equipment",
-                desc: "Full range of free weights, machines, racks, and cardio equipment.",
+                title: "Training Equipment",
+                desc: "Shooting machine, Vertimax, regulation basketball goal, and more — everything you need to train at the highest level.",
               },
               {
                 icon: MapPin,
-                title: "3,500 sq ft",
-                desc: "Spacious, well-maintained facility with dedicated training zones.",
+                title: "1,500 sq ft",
+                desc: "Purpose-built, air-conditioned training space designed for focused sessions.",
               },
               {
                 icon: Users,
@@ -226,24 +243,22 @@ export default function HomePage() {
                 desc: "Pay per session, buy packs, or go monthly. No commitment required.",
               },
             ].map((item) => (
-              <Card
+              <div
                 key={item.title}
-                className="bg-bg-elevated border-border hover:border-brand-orange/50 transition-all group"
+                className="bg-bg-elevated border border-border rounded-lg p-5 hover:border-brand-orange/50 transition-all group"
               >
-                <CardContent className="pt-6">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-md bg-brand-orange/10 p-2 shrink-0 group-hover:bg-brand-orange/20 transition-colors">
-                      <item.icon className="h-5 w-5 text-brand-orange" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">{item.title}</h3>
-                      <p className="text-sm text-text-secondary">
-                        {item.desc}
-                      </p>
-                    </div>
+                <div className="flex items-start gap-3">
+                  <div className="rounded-md bg-brand-orange/10 p-2 shrink-0 group-hover:bg-brand-orange/20 transition-colors">
+                    <item.icon className="h-5 w-5 text-brand-orange" />
                   </div>
-                </CardContent>
-              </Card>
+                  <div>
+                    <h3 className="font-semibold mb-1">{item.title}</h3>
+                    <p className="text-sm text-text-secondary">
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -259,48 +274,26 @@ export default function HomePage() {
             No hidden fees. No long-term contracts. Pay for what you use.
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { name: "Drop-In", price: "$15", unit: "/hour", popular: false },
-              {
-                name: "Day Pass",
-                price: "$35",
-                unit: "/day",
-                popular: false,
-              },
-              {
-                name: "10-Pack",
-                price: "$120",
-                unit: "save 20%",
-                popular: true,
-              },
-              {
-                name: "Monthly",
-                price: "$89",
-                unit: "/month",
-                popular: false,
-              },
-            ].map((item) => (
-              <Card
-                key={item.name}
-                className={`bg-bg-secondary border-border relative ${
-                  item.popular ? "border-brand-orange ring-1 ring-brand-orange/30" : ""
+            {rates.map((rate, i) => (
+              <div
+                key={rate.id}
+                className={`bg-bg-secondary border border-border rounded-lg p-6 pt-8 text-center relative ${
+                  i === 0 ? "border-brand-orange ring-1 ring-brand-orange/30" : ""
                 }`}
               >
-                {item.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-orange text-white text-xs font-bold px-3 py-1 rounded-full">
+                {i === 0 && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-brand-orange text-white text-xs font-bold px-3 py-1 rounded-b-lg">
                     MOST POPULAR
                   </div>
                 )}
-                <CardContent className="pt-8 text-center">
-                  <h3 className="font-display font-bold uppercase tracking-wide text-lg mb-2">
-                    {item.name}
-                  </h3>
-                  <p className="text-3xl font-display font-bold text-brand-orange">
-                    {item.price}
-                  </p>
-                  <p className="text-sm text-text-muted mt-1">{item.unit}</p>
-                </CardContent>
-              </Card>
+                <h3 className="font-display font-bold uppercase tracking-wide text-lg mb-2">
+                  {rate.name}
+                </h3>
+                <p className="text-3xl font-display font-bold text-brand-orange">
+                  {formatCents(rate.price_cents)}
+                </p>
+                <p className="text-sm text-text-muted mt-1">/{rate.per_unit}</p>
+              </div>
             ))}
           </div>
           <div className="text-center mt-8">
