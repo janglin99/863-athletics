@@ -3,6 +3,61 @@ import { createClient } from "@/lib/supabase/server"
 import { addDays, format } from "date-fns"
 
 const SLOT_DURATION_MINUTES = 60
+const FACILITY_TIMEZONE = "America/New_York"
+
+// Build a Date in a specific timezone
+function buildDateInTZ(
+  dateKey: string,
+  hours: number,
+  minutes: number,
+  tz: string
+): Date {
+  // Create a date string as if in the target timezone, then let the engine resolve it
+  const pad = (n: number) => n.toString().padStart(2, "0")
+  const dateStr = `${dateKey}T${pad(hours)}:${pad(minutes)}:00`
+
+  // Use Intl to find the UTC offset for this date/time in the target timezone
+  const tempDate = new Date(dateStr + "Z") // treat as UTC temporarily
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+
+  // Get the offset by comparing the local representation
+  const parts = formatter.formatToParts(tempDate)
+  const getPart = (type: string) =>
+    parts.find((p) => p.type === type)?.value || "0"
+
+  const tzYear = parseInt(getPart("year"))
+  const tzMonth = parseInt(getPart("month"))
+  const tzDay = parseInt(getPart("day"))
+  const tzHour = parseInt(getPart("hour") === "24" ? "0" : getPart("hour"))
+
+  // Build the date using a simpler approach: construct the ISO string with offset
+  // We know the target time, so we find what UTC time corresponds to it
+  const targetMs = new Date(
+    `${dateKey}T${pad(hours)}:${pad(minutes)}:00Z`
+  ).getTime()
+
+  // Find the offset: what does the TZ show when it's this UTC time?
+  const utcDate = new Date(targetMs)
+  const tzStr = utcDate.toLocaleString("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    hour12: false,
+  })
+  const tzHourAtUTC = parseInt(tzStr === "24" ? "0" : tzStr)
+  const offsetHours = tzHourAtUTC - utcDate.getUTCHours()
+
+  // The actual UTC time for "hours:minutes in tz" = target - offset
+  return new Date(targetMs - offsetHours * 3600000)
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -52,11 +107,9 @@ export async function GET(req: NextRequest) {
     const [openH, openM] = dayHours.open_time.split(":").map(Number)
     const [closeH, closeM] = dayHours.close_time.split(":").map(Number)
 
-    const dayOpen = new Date(current)
-    dayOpen.setHours(openH, openM, 0, 0)
-
-    const dayClose = new Date(current)
-    dayClose.setHours(closeH, closeM, 0, 0)
+    // Build open/close times in Eastern Time
+    const dayOpen = buildDateInTZ(dateKey, openH, openM, FACILITY_TIMEZONE)
+    const dayClose = buildDateInTZ(dateKey, closeH, closeM, FACILITY_TIMEZONE)
 
     const slots = []
     let slotStart = new Date(dayOpen)
