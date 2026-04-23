@@ -167,14 +167,20 @@ export function RecurringOptions({
               </div>
             </div>
 
-            {/* Time slots */}
+            {/* Time slots — start/end selection */}
             <div className="space-y-2">
-              <Label>Time (select start and end)</Label>
+              <Label>
+                {config.timeSlots.length === 0
+                  ? "Select start time"
+                  : "Click another time to adjust end time"}
+              </Label>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {Array.from({ length: 32 }, (_, i) => ({
                   hour: Math.floor(i / 2) + 6,
                   minute: (i % 2) * 30,
+                  index: i,
                 })).map((slot) => {
+                  const slotMin = slot.hour * 60 + slot.minute
                   const selected = config.timeSlots.some(
                     (s) => s.hour === slot.hour && s.minute === slot.minute
                   )
@@ -182,33 +188,104 @@ export function RecurringOptions({
                   const ampm = slot.hour >= 12 ? "PM" : "AM"
                   const timeStr = `${h}:${slot.minute.toString().padStart(2, "0")} ${ampm}`
 
+                  // Check if this is the end button (slot right after last selected)
+                  const lastSelected = config.timeSlots.length > 0 ? config.timeSlots[config.timeSlots.length - 1] : null
+                  const lastMin = lastSelected ? lastSelected.hour * 60 + lastSelected.minute : -1
+                  const isEndButton = lastSelected && slotMin === lastMin + 30
+
+                  // Check if this is the first selected
+                  const firstSelected = config.timeSlots.length > 0 ? config.timeSlots[0] : null
+                  const isFirst = firstSelected && slot.hour === firstSelected.hour && slot.minute === firstSelected.minute
+
                   return (
                     <button
                       key={`${slot.hour}-${slot.minute}`}
                       onClick={() => {
-                        const slots = selected
-                          ? config.timeSlots.filter(
-                              (s) => !(s.hour === slot.hour && s.minute === slot.minute)
-                            )
-                          : [...config.timeSlots, slot].sort(
-                              (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)
-                            )
-                        update({ timeSlots: slots })
+                        if (config.timeSlots.length === 0) {
+                          // First click: auto-select 1 hour (2 slots)
+                          const nextSlot = {
+                            hour: slot.minute === 30 ? slot.hour + 1 : slot.hour,
+                            minute: slot.minute === 30 ? 0 : 30,
+                          }
+                          // Check next slot is within range (before 10 PM)
+                          if (nextSlot.hour * 60 + nextSlot.minute <= 22 * 60) {
+                            update({ timeSlots: [slot, nextSlot] })
+                          } else {
+                            update({ timeSlots: [slot] })
+                          }
+                        } else {
+                          const firstMin = config.timeSlots[0].hour * 60 + config.timeSlots[0].minute
+
+                          if (slotMin <= firstMin) {
+                            // Clicked at or before start — new start with 1-hour auto
+                            const nextSlot = {
+                              hour: slot.minute === 30 ? slot.hour + 1 : slot.hour,
+                              minute: slot.minute === 30 ? 0 : 30,
+                            }
+                            if (nextSlot.hour * 60 + nextSlot.minute <= 22 * 60) {
+                              update({ timeSlots: [slot, nextSlot] })
+                            } else {
+                              update({ timeSlots: [slot] })
+                            }
+                          } else {
+                            // Extend/shrink to this as end time
+                            const newSlots: { hour: number; minute: number }[] = []
+                            let curMin = firstMin
+                            while (curMin <= slotMin) {
+                              newSlots.push({
+                                hour: Math.floor(curMin / 60),
+                                minute: curMin % 60,
+                              })
+                              curMin += 30
+                            }
+                            update({ timeSlots: newSlots })
+                          }
+                        }
                       }}
                       className={cn(
-                        "px-2 py-2 rounded-md text-xs font-medium transition-all",
+                        "px-2 py-2 rounded-md text-xs font-medium transition-all relative",
                         selected
                           ? "bg-brand-orange text-white"
-                          : "bg-bg-elevated text-text-secondary border border-border hover:border-brand-orange/50"
+                          : isEndButton
+                            ? "bg-brand-orange/20 text-brand-orange border border-brand-orange/50"
+                            : "bg-bg-elevated text-text-secondary border border-border hover:border-brand-orange/50"
                       )}
                     >
                       {timeStr}
+                      {isFirst && config.timeSlots.length > 0 && (
+                        <span className="absolute -top-1.5 -left-1 text-[10px] bg-brand-orange-dark text-white px-1 rounded">
+                          START
+                        </span>
+                      )}
+                      {isEndButton && (
+                        <span className="absolute -top-1.5 -right-1 text-[10px] bg-brand-orange-dark text-white px-1 rounded">
+                          END
+                        </span>
+                      )}
                     </button>
                   )
                 })}
               </div>
-              {config.timeSlots.length > 0 && config.timeSlots.length < 2 && (
-                <p className="text-xs text-warning">Min 1h required (select at least 2 slots)</p>
+              {config.timeSlots.length >= 2 && (
+                <div className="bg-bg-elevated rounded-lg border border-brand-orange/20 p-3 flex items-center justify-between">
+                  <div className="text-sm">
+                    <span className="text-text-secondary">Session: </span>
+                    <span className="font-mono font-semibold text-text-primary">
+                      {(() => {
+                        const first = config.timeSlots[0]
+                        const last = config.timeSlots[config.timeSlots.length - 1]
+                        const endMin = last.hour * 60 + last.minute + 30
+                        const fh = first.hour === 12 ? 12 : first.hour > 12 ? first.hour - 12 : first.hour
+                        const eh = Math.floor(endMin / 60)
+                        const ehd = eh === 12 ? 12 : eh > 12 ? eh - 12 : eh
+                        return `${fh}:${first.minute.toString().padStart(2, "0")} ${first.hour >= 12 ? "PM" : "AM"} — ${ehd}:${(endMin % 60).toString().padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}`
+                      })()}
+                    </span>
+                  </div>
+                  <span className="text-sm font-display font-bold text-brand-orange">
+                    {totalHoursPerSession}h
+                  </span>
+                </div>
               )}
             </div>
 

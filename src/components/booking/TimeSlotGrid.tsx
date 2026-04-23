@@ -17,10 +17,10 @@ export function TimeSlotGrid({
   slots,
   selectedSlots,
   onSlotsChanged,
-  maxSlots = 10,
+  maxSlots = 20,
   minSlots = 2,
 }: TimeSlotGridProps) {
-  const [startIndex, setStartIndex] = useState<number | null>(null)
+  const [mode, setMode] = useState<"idle" | "extending">("idle")
   const availableSlots = slots.filter((s) => s.available)
 
   if (slots.length === 0) {
@@ -31,12 +31,16 @@ export function TimeSlotGrid({
     )
   }
 
-  // Find the end time display for the last slot
-  const totalHours = selectedSlots.reduce((ms, slot) => {
-    return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
-  }, 0) / (1000 * 60 * 60)
-  const startTime = selectedSlots.length > 0 ? selectedSlots[0].start : null
-  const endTime =
+  const totalHours =
+    selectedSlots.reduce((ms, slot) => {
+      return (
+        ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
+      )
+    }, 0) /
+    (1000 * 60 * 60)
+  const displayStart =
+    selectedSlots.length > 0 ? selectedSlots[0].start : null
+  const displayEnd =
     selectedSlots.length > 0
       ? selectedSlots[selectedSlots.length - 1].end
       : null
@@ -45,66 +49,89 @@ export function TimeSlotGrid({
     const slot = slots[index]
     if (!slot.available) return
 
-    if (startIndex === null) {
-      // First click: set start time
-      setStartIndex(index)
-      onSlotsChanged([{ start: slot.start, end: slot.end }])
-    } else if (index === startIndex) {
-      // Clicking same slot: deselect
-      setStartIndex(null)
-      onSlotsChanged([])
-    } else {
-      // Second click: set end time and select range
-      const fromIdx = Math.min(startIndex, index)
-      const toIdx = Math.max(startIndex, index)
-
-      // Check all slots in range are available and within max
-      const rangeSlots = slots.slice(fromIdx, toIdx + 1)
-      const allAvailable = rangeSlots.every((s) => s.available)
-      const rangeCount = rangeSlots.length
-
-      if (!allAvailable) {
-        // Can't span across unavailable slots — reset and pick this as new start
-        setStartIndex(index)
+    if (mode === "idle" || selectedSlots.length === 0) {
+      // First click: auto-select 1 hour (this slot + next slot)
+      const endIdx = index + 1
+      if (endIdx < slots.length && slots[endIdx].available) {
+        // Select 2 slots (1 hour)
+        const selected = slots.slice(index, endIdx + 1).map((s) => ({
+          start: s.start,
+          end: s.end,
+        }))
+        onSlotsChanged(selected)
+      } else {
+        // Only one slot available, select just this one
         onSlotsChanged([{ start: slot.start, end: slot.end }])
+      }
+      setMode("extending")
+    } else if (mode === "extending") {
+      // Already have a selection — user is adjusting the end time
+      const currentStartIdx = slots.findIndex(
+        (s) => s.start === selectedSlots[0].start
+      )
+
+      if (index <= currentStartIdx) {
+        // Clicked before or on start — treat as new start, auto-select 1 hour
+        const endIdx = index + 1
+        if (endIdx < slots.length && slots[endIdx].available) {
+          const selected = slots.slice(index, endIdx + 1).map((s) => ({
+            start: s.start,
+            end: s.end,
+          }))
+          onSlotsChanged(selected)
+        } else {
+          onSlotsChanged([{ start: slot.start, end: slot.end }])
+        }
         return
       }
 
-      if (rangeCount > maxSlots) {
-        return // Too many hours
+      // Extend/shrink to this slot as the END time
+      // The clicked button represents the end time, so we select slots from start through this index
+      const rangeSlots = slots.slice(currentStartIdx, index + 1)
+      const allAvailable = rangeSlots.every((s) => s.available)
+
+      if (!allAvailable) {
+        // Can't span across unavailable slots
+        return
       }
 
-      // Select the full range
+      if (rangeSlots.length > maxSlots) {
+        return
+      }
+
       const selected = rangeSlots.map((s) => ({
         start: s.start,
         end: s.end,
       }))
       onSlotsChanged(selected)
-      setStartIndex(null) // Reset for next selection
     }
   }
 
   const handleClear = () => {
-    setStartIndex(null)
+    setMode("idle")
     onSlotsChanged([])
   }
 
-  // Determine which slots are in the selected range
   const isSlotSelected = (index: number) =>
     selectedSlots.some((s) => s.start === slots[index].start)
 
-  // When only start is picked, show it as "selecting"
-  const isStartSlot = (index: number) =>
-    startIndex !== null && index === startIndex && selectedSlots.length <= 1
+  // Find the end time button index (the slot AFTER the last selected slot)
+  const lastSelectedIdx =
+    selectedSlots.length > 0
+      ? slots.findIndex(
+          (s) => s.start === selectedSlots[selectedSlots.length - 1].start
+        )
+      : -1
+  const endButtonIdx = lastSelectedIdx + 1
 
   return (
     <div className="space-y-4">
       {/* Instructions */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-text-secondary">
-          {startIndex !== null && selectedSlots.length <= 1
-            ? "Now select your end time"
-            : "Select your start time"}
+          {mode === "idle"
+            ? "Select your start time"
+            : "Click another time to adjust end time"}
           <span className="text-text-muted ml-2">
             ({availableSlots.length} slots available)
           </span>
@@ -123,18 +150,14 @@ export function TimeSlotGrid({
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
         {slots.map((slot, index) => {
           const selected = isSlotSelected(index)
-          const isStart = isStartSlot(index)
           const isDisabled = !slot.available
+          const isEndButton = index === endButtonIdx && selectedSlots.length > 0
 
-          // Determine if this is first, last, or middle of selection
+          // Labels
           const isFirstSelected =
             selected &&
             selectedSlots.length > 0 &&
             slot.start === selectedSlots[0].start
-          const isLastSelected =
-            selected &&
-            selectedSlots.length > 1 &&
-            slot.start === selectedSlots[selectedSlots.length - 1].start
 
           return (
             <button
@@ -143,27 +166,24 @@ export function TimeSlotGrid({
               disabled={isDisabled}
               className={cn(
                 "px-3 py-2.5 rounded-md text-sm font-medium transition-all relative",
-                selected || isStart
+                selected
                   ? "bg-brand-orange text-white shadow-lg shadow-brand-orange/25"
-                  : slot.available
-                    ? "bg-bg-elevated text-text-primary hover:bg-bg-hover hover:border-brand-orange border border-border"
-                    : "bg-bg-primary text-text-muted border border-border/50 cursor-not-allowed opacity-50"
+                  : isEndButton
+                    ? "bg-brand-orange/20 text-brand-orange border border-brand-orange/50"
+                    : slot.available
+                      ? "bg-bg-elevated text-text-primary hover:bg-bg-hover hover:border-brand-orange border border-border"
+                      : "bg-bg-primary text-text-muted border border-border/50 cursor-not-allowed opacity-50"
               )}
             >
               {formatTime(slot.start)}
-              {isFirstSelected && selectedSlots.length > 1 && (
+              {isFirstSelected && (
                 <span className="absolute -top-1.5 -left-1 text-[10px] bg-brand-orange-dark text-white px-1 rounded">
                   START
                 </span>
               )}
-              {isLastSelected && (
+              {isEndButton && !isDisabled && (
                 <span className="absolute -top-1.5 -right-1 text-[10px] bg-brand-orange-dark text-white px-1 rounded">
                   END
-                </span>
-              )}
-              {isStart && selectedSlots.length <= 1 && (
-                <span className="absolute -top-1.5 -left-1 text-[10px] bg-brand-orange-dark text-white px-1 rounded">
-                  START
                 </span>
               )}
             </button>
@@ -172,28 +192,19 @@ export function TimeSlotGrid({
       </div>
 
       {/* Selection summary */}
-      {selectedSlots.length > 0 && startTime && endTime && (
-        <div className={`bg-bg-elevated rounded-lg border p-3 flex items-center justify-between ${
-          selectedSlots.length < minSlots ? "border-warning/30" : "border-brand-orange/20"
-        }`}>
+      {selectedSlots.length >= minSlots && displayStart && displayEnd && (
+        <div className="bg-bg-elevated rounded-lg border border-brand-orange/20 p-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="text-sm">
               <span className="text-text-secondary">Session: </span>
               <span className="font-mono font-semibold text-text-primary">
-                {formatTime(startTime)} — {formatTime(endTime)}
+                {formatTime(displayStart)} — {formatTime(displayEnd)}
               </span>
             </div>
           </div>
-          <div className="text-right">
-            <span className="text-sm font-display font-bold text-brand-orange">
-              {totalHours}h
-            </span>
-            {selectedSlots.length < minSlots && (
-              <p className="text-xs text-warning">
-                Min {minSlots * 0.5}h required
-              </p>
-            )}
-          </div>
+          <span className="text-sm font-display font-bold text-brand-orange">
+            {totalHours}h
+          </span>
         </div>
       )}
     </div>
