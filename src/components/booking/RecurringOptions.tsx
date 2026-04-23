@@ -37,7 +37,7 @@ export interface RecurringConfig {
   daysOfWeek: number[]
   startDate: Date
   endDate: Date
-  timeSlots: { hour: number }[] // selected hours for each recurring day
+  timeSlots: { hour: number; minute: number }[] // selected 30-min slots
 }
 
 interface RecurringOptionsProps {
@@ -93,9 +93,9 @@ export function RecurringOptions({
     onChange({ ...config, ...partial })
 
   const recurringDates = getRecurringDates(config)
-  const totalHoursPerSession = config.timeSlots.length || 1
+  const totalHoursPerSession = (config.timeSlots.length * 0.5) || 0.5
   const totalSessions = recurringDates.length
-  const totalCents = priceCentsPerHour * totalHoursPerSession * totalSessions
+  const totalCents = Math.round(priceCentsPerHour * totalHoursPerSession * totalSessions)
 
   return (
     <div className="space-y-4">
@@ -169,25 +169,29 @@ export function RecurringOptions({
 
             {/* Time slots */}
             <div className="space-y-2">
-              <Label>Time (select hours)</Label>
+              <Label>Time (select start and end)</Label>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {Array.from({ length: 16 }, (_, i) => i + 6).map((hour) => {
-                  const selected = config.timeSlots.some((s) => s.hour === hour)
-                  const timeStr =
-                    hour === 12
-                      ? "12 PM"
-                      : hour > 12
-                        ? `${hour - 12} PM`
-                        : `${hour} AM`
+                {Array.from({ length: 32 }, (_, i) => ({
+                  hour: Math.floor(i / 2) + 6,
+                  minute: (i % 2) * 30,
+                })).map((slot) => {
+                  const selected = config.timeSlots.some(
+                    (s) => s.hour === slot.hour && s.minute === slot.minute
+                  )
+                  const h = slot.hour === 12 ? 12 : slot.hour > 12 ? slot.hour - 12 : slot.hour
+                  const ampm = slot.hour >= 12 ? "PM" : "AM"
+                  const timeStr = `${h}:${slot.minute.toString().padStart(2, "0")} ${ampm}`
 
                   return (
                     <button
-                      key={hour}
+                      key={`${slot.hour}-${slot.minute}`}
                       onClick={() => {
                         const slots = selected
-                          ? config.timeSlots.filter((s) => s.hour !== hour)
-                          : [...config.timeSlots, { hour }].sort(
-                              (a, b) => a.hour - b.hour
+                          ? config.timeSlots.filter(
+                              (s) => !(s.hour === slot.hour && s.minute === slot.minute)
+                            )
+                          : [...config.timeSlots, slot].sort(
+                              (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)
                             )
                         update({ timeSlots: slots })
                       }}
@@ -203,6 +207,9 @@ export function RecurringOptions({
                   )
                 })}
               </div>
+              {config.timeSlots.length > 0 && config.timeSlots.length < 2 && (
+                <p className="text-xs text-warning">Min 1h required (select at least 2 slots)</p>
+              )}
             </div>
 
             {/* Date range */}
@@ -331,13 +338,11 @@ export function RecurringOptions({
                       <div key={i} className="font-mono text-text-secondary">
                         {format(d, "EEE, MMM d, yyyy")} ·{" "}
                         {config.timeSlots
-                          .map((s) =>
-                            s.hour === 12
-                              ? "12 PM"
-                              : s.hour > 12
-                                ? `${s.hour - 12} PM`
-                                : `${s.hour} AM`
-                          )
+                          .map((s) => {
+                            const h = s.hour === 12 ? 12 : s.hour > 12 ? s.hour - 12 : s.hour
+                            const ampm = s.hour >= 12 ? "PM" : "AM"
+                            return `${h}:${s.minute.toString().padStart(2, "0")} ${ampm}`
+                          })
                           .join(", ")}
                       </div>
                     ))}

@@ -124,6 +124,10 @@ export default function BookPage() {
       toast.error("Select at least one time slot")
       return
     }
+    if (recurringConfig.timeSlots.length < 2) {
+      toast.error("Minimum booking is 1 hour (select at least 2 time slots)")
+      return
+    }
 
     const dates = getRecurringDates(recurringConfig)
     if (dates.length === 0) {
@@ -131,13 +135,12 @@ export default function BookPage() {
       return
     }
 
-    // Build slots for each recurring date
+    // Build 30-min slots for each recurring date
     const allSlots = dates.flatMap((date) =>
       recurringConfig.timeSlots.map((ts) => {
         const start = new Date(date)
-        start.setHours(ts.hour, 0, 0, 0)
-        const end = new Date(start)
-        end.setHours(ts.hour + 1, 0, 0, 0)
+        start.setHours(ts.hour, ts.minute, 0, 0)
+        const end = new Date(start.getTime() + 30 * 60 * 1000)
         return { start: start.toISOString(), end: end.toISOString() }
       })
     )
