@@ -64,11 +64,15 @@ export const useCartStore = create<CartState>()(
       getTotalCents: () => {
         const { items } = get()
         return items.reduce((total, item) => {
-          const hours = item.slots.length
+          // Calculate actual hours from slot durations
+          const totalMs = item.slots.reduce((ms, slot) => {
+            return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
+          }, 0)
+          const hours = totalMs / (1000 * 60 * 60)
           if (item.pricePerUnit === "hour") {
-            return total + item.priceCents * hours
+            return total + Math.round(item.priceCents * hours)
           } else if (item.pricePerUnit === "person") {
-            return total + item.priceCents * item.participantCount * hours
+            return total + Math.round(item.priceCents * item.participantCount * hours)
           }
           return total + item.priceCents
         }, 0)

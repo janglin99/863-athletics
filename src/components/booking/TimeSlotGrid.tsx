@@ -10,6 +10,7 @@ interface TimeSlotGridProps {
   selectedSlots: { start: string; end: string }[]
   onSlotsChanged: (slots: { start: string; end: string }[]) => void
   maxSlots?: number
+  minSlots?: number
 }
 
 export function TimeSlotGrid({
@@ -17,6 +18,7 @@ export function TimeSlotGrid({
   selectedSlots,
   onSlotsChanged,
   maxSlots = 10,
+  minSlots = 2,
 }: TimeSlotGridProps) {
   const [startIndex, setStartIndex] = useState<number | null>(null)
   const availableSlots = slots.filter((s) => s.available)
@@ -30,7 +32,9 @@ export function TimeSlotGrid({
   }
 
   // Find the end time display for the last slot
-  const totalHours = selectedSlots.length
+  const totalHours = selectedSlots.reduce((ms, slot) => {
+    return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
+  }, 0) / (1000 * 60 * 60)
   const startTime = selectedSlots.length > 0 ? selectedSlots[0].start : null
   const endTime =
     selectedSlots.length > 0
@@ -168,8 +172,10 @@ export function TimeSlotGrid({
       </div>
 
       {/* Selection summary */}
-      {selectedSlots.length > 1 && startTime && endTime && (
-        <div className="bg-bg-elevated rounded-lg border border-brand-orange/20 p-3 flex items-center justify-between">
+      {selectedSlots.length > 0 && startTime && endTime && (
+        <div className={`bg-bg-elevated rounded-lg border p-3 flex items-center justify-between ${
+          selectedSlots.length < minSlots ? "border-warning/30" : "border-brand-orange/20"
+        }`}>
           <div className="flex items-center gap-3">
             <div className="text-sm">
               <span className="text-text-secondary">Session: </span>
@@ -178,9 +184,16 @@ export function TimeSlotGrid({
               </span>
             </div>
           </div>
-          <span className="text-sm font-display font-bold text-brand-orange">
-            {totalHours} hour{totalHours !== 1 ? "s" : ""}
-          </span>
+          <div className="text-right">
+            <span className="text-sm font-display font-bold text-brand-orange">
+              {totalHours}h
+            </span>
+            {selectedSlots.length < minSlots && (
+              <p className="text-xs text-warning">
+                Min {minSlots * 0.5}h required
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

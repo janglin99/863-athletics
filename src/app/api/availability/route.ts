@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { addDays, format } from "date-fns"
 
-const SLOT_DURATION_MINUTES = 60
+const SLOT_DURATION_MINUTES = 30
 const FACILITY_TIMEZONE = "America/New_York"
 
 // Build a Date in a specific timezone

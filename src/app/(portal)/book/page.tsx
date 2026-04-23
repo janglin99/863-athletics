@@ -169,10 +169,15 @@ export default function BookPage() {
     ? availability[dateKey]?.slots || []
     : []
 
+  const selectedHours =
+    selectedSlots.reduce((ms, slot) => {
+      return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
+    }, 0) / (1000 * 60 * 60)
+
   const estimatedTotal =
     selectedRate && selectedSlots.length > 0
       ? selectedRate.per_unit === "hour"
-        ? selectedRate.price_cents * selectedSlots.length
+        ? Math.round(selectedRate.price_cents * selectedHours)
         : selectedRate.price_cents
       : 0
 
@@ -324,14 +329,15 @@ export default function BookPage() {
                       slots={daySlots}
                       selectedSlots={selectedSlots}
                       onSlotsChanged={setSlots}
-                      maxSlots={selectedRate?.max_hours || 10}
+                      maxSlots={(selectedRate?.max_hours || 10) * 2}
+                      minSlots={2}
                     />
 
-                    {selectedSlots.length > 0 && (
+                    {selectedSlots.length >= 2 && (
                       <div className="flex items-center justify-between bg-bg-secondary rounded-lg border border-brand-orange/30 p-4">
                         <div>
                           <p className="text-sm text-text-secondary">
-                            {selectedSlots.length} hour(s) selected
+                            {selectedHours}h selected
                           </p>
                           <p className="text-xl font-display font-bold text-brand-orange">
                             {formatCents(estimatedTotal)}

@@ -69,14 +69,17 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Calculate total
-  const totalHours = data.slots.length
+  // Calculate total hours from slot durations
+  const totalMs = data.slots.reduce((ms, slot) => {
+    return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
+  }, 0)
+  const totalHours = totalMs / (1000 * 60 * 60)
   let totalCents = rate.price_cents
 
   if (rate.per_unit === "hour") {
-    totalCents = rate.price_cents * totalHours
+    totalCents = Math.round(rate.price_cents * totalHours)
   } else if (rate.per_unit === "person") {
-    totalCents = rate.price_cents * data.participantCount * totalHours
+    totalCents = Math.round(rate.price_cents * data.participantCount * totalHours)
   }
 
   const { data: booking, error: bookingError } = await supabase
