@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   Sheet,
@@ -17,15 +18,22 @@ export function CartDrawer() {
   const { items, removeItem, getTotalCents, getItemCount } = useCartStore()
   const router = useRouter()
   const count = getItemCount()
+  const [open, setOpen] = useState(false)
+
+  const handleCheckout = () => {
+    setOpen(false)
+    setTimeout(() => router.push("/book/checkout"), 150)
+  }
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
         render={
           <Button
             variant="outline"
             size="sm"
             className="relative border-border text-text-primary"
+            onClick={() => setOpen(true)}
           >
             <ShoppingCart className="h-4 w-4 mr-2" />
             Cart
@@ -84,15 +92,23 @@ export function CartDrawer() {
                             </p>
                           </>
                         ) : (
-                          item.slots.map((slot, i) => (
-                            <p
-                              key={i}
-                              className="text-xs text-text-secondary font-mono"
-                            >
-                              {formatDate(slot.start)} ·{" "}
-                              {formatTime(slot.start)} - {formatTime(slot.end)}
+                          item.slots.length <= 4 ? (
+                            item.slots.map((slot, i) => (
+                              <p
+                                key={i}
+                                className="text-xs text-text-secondary font-mono"
+                              >
+                                {formatDate(slot.start)} ·{" "}
+                                {formatTime(slot.start)} - {formatTime(slot.end)}
+                              </p>
+                            ))
+                          ) : (
+                            <p className="text-xs text-text-secondary font-mono">
+                              {formatDate(item.slots[0].start)} ·{" "}
+                              {formatTime(item.slots[0].start)} -{" "}
+                              {formatTime(item.slots[item.slots.length - 1].end)}
                             </p>
-                          ))
+                          )
                         )}
                       </div>
                       {item.participantCount > 1 && (
@@ -105,7 +121,17 @@ export function CartDrawer() {
                       <span className="text-sm font-display font-bold text-brand-orange">
                         {formatCents(
                           item.pricePerUnit === "hour"
-                            ? item.priceCents * item.slots.length
+                            ? Math.round(
+                                item.priceCents *
+                                  (item.slots.reduce(
+                                    (ms, s) =>
+                                      ms +
+                                      (new Date(s.end).getTime() -
+                                        new Date(s.start).getTime()),
+                                    0
+                                  ) /
+                                    (1000 * 60 * 60))
+                              )
                             : item.priceCents
                         )}
                       </span>
@@ -129,7 +155,7 @@ export function CartDrawer() {
                 </span>
               </div>
               <Button
-                onClick={() => router.push("/book/checkout")}
+                onClick={handleCheckout}
                 className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-6"
               >
                 Proceed to Checkout
