@@ -1,14 +1,18 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import { useCartStore } from "@/store/cartStore"
 import { formatCents } from "@/lib/utils/format"
 import { CartDrawer } from "./CartDrawer"
 
 export function FloatingCartButton() {
   const { getItemCount, getTotalCents } = useCartStore()
+  const pathname = usePathname()
   const count = getItemCount()
 
+  // Hide on checkout and confirmation pages
   if (count === 0) return null
+  if (pathname.startsWith("/book/checkout") || pathname.startsWith("/book/confirmation")) return null
 
   return (
     <div className="lg:hidden fixed bottom-16 left-4 right-4 z-40">
