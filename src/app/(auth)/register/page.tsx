@@ -44,8 +44,9 @@ export default function RegisterPage() {
       return
     }
 
-    toast.success("Account created! Check your email to verify.")
-    router.push("/verify")
+    toast.success("Account created! Welcome to 863 Athletics.")
+    router.push("/dashboard")
+    router.refresh()
   }
 
   return (
