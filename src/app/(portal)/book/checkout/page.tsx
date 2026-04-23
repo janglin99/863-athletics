@@ -163,26 +163,39 @@ export default function CheckoutPage() {
         <h3 className="font-display font-bold uppercase tracking-wide mb-4">
           Order Summary
         </h3>
-        {items.map((item) => (
-          <div key={item.id} className="flex justify-between items-start mb-3">
-            <div>
-              <p className="font-semibold text-sm">{item.rateName}</p>
-              {item.slots.map((slot, i) => (
-                <p key={i} className="text-xs text-text-secondary font-mono">
-                  {formatDate(slot.start)} · {formatTime(slot.start)} -{" "}
-                  {formatTime(slot.end)}
-                </p>
-              ))}
+        {items.map((item) => {
+          const firstSlot = item.slots[0]
+          const lastSlot = item.slots[item.slots.length - 1]
+          const totalMs = item.slots.reduce(
+            (ms, s) => ms + (new Date(s.end).getTime() - new Date(s.start).getTime()), 0
+          )
+          const totalHours = totalMs / (1000 * 60 * 60)
+          const itemTotal = item.pricePerUnit === "hour"
+            ? Math.round(item.priceCents * totalHours)
+            : item.priceCents
+
+          return (
+            <div key={item.id} className="flex justify-between items-start mb-3">
+              <div>
+                <p className="font-semibold text-sm">{item.rateName}</p>
+                {item.isRecurring ? (
+                  <p className="text-xs text-text-secondary font-mono">
+                    {item.recurringConfig?.frequency} · {item.slots.length} sessions ·{" "}
+                    {formatDate(firstSlot.start)} — {formatDate(lastSlot.start)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-text-secondary font-mono">
+                    {formatDate(firstSlot.start)} · {formatTime(firstSlot.start)} -{" "}
+                    {formatTime(lastSlot.end)} ({totalHours}h)
+                  </p>
+                )}
+              </div>
+              <span className="font-display font-bold text-brand-orange">
+                {formatCents(itemTotal)}
+              </span>
             </div>
-            <span className="font-display font-bold text-brand-orange">
-              {formatCents(
-                item.pricePerUnit === "hour"
-                  ? item.priceCents * item.slots.length
-                  : item.priceCents
-              )}
-            </span>
-          </div>
-        ))}
+          )
+        })}
         <div className="border-t border-border pt-3 mt-3 flex justify-between">
           <span className="font-semibold">Total</span>
           <span className="text-xl font-display font-bold text-brand-orange">
