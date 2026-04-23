@@ -1,5 +1,6 @@
 import { PortalSidebar } from "@/components/layout/PortalSidebar"
 import { MobileNav } from "@/components/layout/MobileNav"
+import { FloatingCartButton } from "@/components/cart/FloatingCartButton"
 
 export default function PortalLayout({
   children,
@@ -12,6 +13,7 @@ export default function PortalLayout({
       <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-20 lg:pb-8 overflow-x-hidden">
         {children}
       </main>
+      <FloatingCartButton />
       <MobileNav />
     </div>
   )
