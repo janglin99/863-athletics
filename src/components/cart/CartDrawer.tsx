@@ -92,23 +92,11 @@ export function CartDrawer() {
                             </p>
                           </>
                         ) : (
-                          item.slots.length <= 4 ? (
-                            item.slots.map((slot, i) => (
-                              <p
-                                key={i}
-                                className="text-xs text-text-secondary font-mono"
-                              >
-                                {formatDate(slot.start)} ·{" "}
-                                {formatTime(slot.start)} - {formatTime(slot.end)}
-                              </p>
-                            ))
-                          ) : (
-                            <p className="text-xs text-text-secondary font-mono">
-                              {formatDate(item.slots[0].start)} ·{" "}
-                              {formatTime(item.slots[0].start)} -{" "}
-                              {formatTime(item.slots[item.slots.length - 1].end)}
-                            </p>
-                          )
+                          <p className="text-xs text-text-secondary font-mono">
+                            {formatDate(item.slots[0].start)} ·{" "}
+                            {formatTime(item.slots[0].start)} -{" "}
+                            {formatTime(item.slots[item.slots.length - 1].end)}
+                          </p>
                         )}
                       </div>
                       {item.participantCount > 1 && (
