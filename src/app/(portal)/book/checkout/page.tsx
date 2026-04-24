@@ -316,6 +316,7 @@ export default function CheckoutPage() {
                   )
                 }}
                 bookingNumber={bookingNumber}
+                bookingId={bookingId || ""}
               />
             </Elements>
           ) : (

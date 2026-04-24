@@ -9,11 +9,13 @@ import { toast } from "sonner"
 interface StripePaymentFormProps {
   onSuccess: () => void
   bookingNumber: string
+  bookingId: string
 }
 
 export function StripePaymentForm({
   onSuccess,
   bookingNumber,
+  bookingId,
 }: StripePaymentFormProps) {
   const stripe = useStripe()
   const elements = useElements()
@@ -37,6 +39,15 @@ export function StripePaymentForm({
       toast.error(error.message || "Payment failed")
       setLoading(false)
       return
+    }
+
+    // Payment succeeded — confirm the booking server-side
+    try {
+      await fetch(`/api/bookings/${bookingId}/confirm`, {
+        method: "POST",
+      })
+    } catch {
+      // Webhook will handle it as fallback
     }
 
     toast.success("Payment successful!")

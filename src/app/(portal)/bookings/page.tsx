@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { BookingStatusBadge } from "@/components/booking/BookingStatusBadge"
-import { formatCents, formatDateTime } from "@/lib/utils/format"
+import { formatCents, formatDateTime, formatTime } from "@/lib/utils/format"
 import { ClipboardList, CalendarPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { Booking } from "@/types"
@@ -29,7 +29,7 @@ export default function BookingsPage() {
 
       const { data } = await supabase
         .from("bookings")
-        .select("*, rate:rates(*), slots:booking_slots(*)")
+        .select("*, rate:rates(*), slots:booking_slots(*), access_codes(*)")
         .eq("customer_id", user.id)
         .order("created_at", { ascending: false })
 
@@ -96,6 +96,10 @@ export default function BookingsPage() {
         <div className="space-y-3">
           {filtered.map((booking) => {
             const firstSlot = booking.slots?.[0]
+            const lastSlot = booking.slots?.[booking.slots.length - 1]
+            const activeCode = booking.access_codes?.find(
+              (c) => c.status === "active" && c.pin_code !== "GENERATING" && c.pin_code !== "MANUAL_REQUIRED"
+            )
 
             return (
               <Link key={booking.id} href={`/bookings/${booking.id}`}>
@@ -110,16 +114,23 @@ export default function BookingsPage() {
                           <BookingStatusBadge status={booking.status} />
                         </div>
                         <p className="font-semibold">{booking.rate?.name}</p>
-                        {firstSlot && (
+                        {firstSlot && lastSlot && (
                           <p className="text-sm text-text-secondary">
                             {formatDateTime(firstSlot.start_time)} ·{" "}
-                            {booking.slots?.length}h
+                            {formatTime(firstSlot.start_time)} - {formatTime(lastSlot.end_time)}
                           </p>
                         )}
                       </div>
-                      <p className="font-display font-bold text-brand-orange">
-                        {formatCents(booking.total_cents)}
-                      </p>
+                      <div className="text-right">
+                        <p className="font-display font-bold text-brand-orange">
+                          {formatCents(booking.total_cents)}
+                        </p>
+                        {activeCode && (
+                          <p className="text-xs font-mono text-success mt-1">
+                            PIN: {activeCode.pin_code}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
