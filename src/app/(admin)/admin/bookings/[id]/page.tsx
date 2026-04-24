@@ -136,12 +136,22 @@ export default function AdminBookingDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="font-semibold">{booking.rate?.name}</p>
-            {booking.slots?.map((slot, i) => (
-              <p key={i} className="text-text-secondary font-mono">
-                {formatDate(slot.start_time)} ·{" "}
-                {formatTimeRange(slot.start_time, slot.end_time)}
-              </p>
-            ))}
+            {booking.slots && booking.slots.length > 0 && (() => {
+              const sorted = [...booking.slots]
+                .filter(s => s.status !== "cancelled")
+                .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+              if (sorted.length === 0) return null
+              const first = sorted[0]
+              const last = sorted[sorted.length - 1]
+              const totalMs = sorted.reduce((ms, s) =>
+                ms + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()), 0)
+              const totalHours = totalMs / (1000 * 60 * 60)
+              return (
+                <p className="text-text-secondary font-mono">
+                  {formatDate(first.start_time)} · {formatTimeRange(first.start_time, last.end_time)} ({totalHours}h)
+                </p>
+              )
+            })()}
             {booking.notes && (
               <p className="text-text-muted italic">{booking.notes}</p>
             )}

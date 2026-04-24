@@ -112,17 +112,37 @@ export default function BookingDetailPage() {
             <span className="text-text-secondary">Type</span>
             <span className="font-semibold">{booking.rate?.name}</span>
           </div>
-          {booking.slots?.map((slot, i) => (
-            <div key={i} className="flex justify-between">
-              <span className="text-text-secondary">
-                Slot {booking.slots!.length > 1 ? i + 1 : ""}
-              </span>
-              <span className="font-mono text-sm">
-                {formatDate(slot.start_time)} ·{" "}
-                {formatTimeRange(slot.start_time, slot.end_time)}
-              </span>
-            </div>
-          ))}
+          {booking.slots && booking.slots.length > 0 && (() => {
+            const sorted = [...booking.slots]
+              .filter(s => s.status !== "cancelled")
+              .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+            if (sorted.length === 0) return null
+            const first = sorted[0]
+            const last = sorted[sorted.length - 1]
+            const totalMs = sorted.reduce((ms, s) =>
+              ms + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()), 0)
+            const totalHours = totalMs / (1000 * 60 * 60)
+            return (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Date</span>
+                  <span className="font-mono text-sm">
+                    {formatDate(first.start_time)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Time</span>
+                  <span className="font-mono text-sm">
+                    {formatTimeRange(first.start_time, last.end_time)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Duration</span>
+                  <span className="font-mono text-sm">{totalHours}h</span>
+                </div>
+              </>
+            )
+          })()}
           {booking.participant_count > 1 && (
             <div className="flex justify-between">
               <span className="text-text-secondary">Participants</span>
