@@ -26,7 +26,9 @@ import {
   CreditCard,
   XCircle,
   Copy,
+  RefreshCw,
 } from "lucide-react"
+import { RescheduleModal } from "@/components/bookings/RescheduleModal"
 import type { Booking } from "@/types"
 
 export default function BookingDetailPage() {
@@ -36,6 +38,7 @@ export default function BookingDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showCancel, setShowCancel] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [showReschedule, setShowReschedule] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -205,14 +208,26 @@ export default function BookingDetailPage() {
 
       {/* Actions */}
       {["confirmed", "pending_payment"].includes(booking.status) && (
-        <Button
-          variant="outline"
-          onClick={() => setShowCancel(true)}
-          className="w-full border-error/30 text-error hover:bg-error/10"
-        >
-          <XCircle className="mr-2 h-4 w-4" />
-          Cancel Booking
-        </Button>
+        <div className="space-y-3">
+          {booking.status === "confirmed" && (
+            <Button
+              variant="outline"
+              onClick={() => setShowReschedule(true)}
+              className="w-full border-brand-orange/30 text-brand-orange hover:bg-brand-orange/10"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reschedule Booking
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => setShowCancel(true)}
+            className="w-full border-error/30 text-error hover:bg-error/10"
+          >
+            <XCircle className="mr-2 h-4 w-4" />
+            Cancel Booking
+          </Button>
+        </div>
       )}
 
       <ConfirmDialog
@@ -224,6 +239,19 @@ export default function BookingDetailPage() {
         onConfirm={handleCancel}
         variant="destructive"
       />
+
+      {booking.status === "confirmed" && (
+        <RescheduleModal
+          booking={booking}
+          open={showReschedule}
+          onOpenChange={setShowReschedule}
+          onRescheduled={async () => {
+            const res = await fetch(`/api/bookings/${params.id}`)
+            const data = await res.json()
+            setBooking(data.booking)
+          }}
+        />
+      )}
     </div>
   )
 }
