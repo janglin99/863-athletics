@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useBookingStore } from "@/store/bookingStore"
@@ -13,6 +13,7 @@ import {
   type RecurringConfig,
 } from "@/components/booking/RecurringOptions"
 import { CartDrawer } from "@/components/cart/CartDrawer"
+import { HoldCountdown } from "@/components/booking/HoldCountdown"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -51,8 +52,9 @@ export default function BookPage() {
     participantCount,
   } = useBookingStore()
 
-  const { addItem } = useCartStore()
+  const { addItem, items: cartItems, clearCart } = useCartStore()
   const router = useRouter()
+  const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null)
 
   const [rates, setRates] = useState<Rate[]>([])
   const [availability, setAvailability] = useState<AvailabilityMap>({})
@@ -94,6 +96,32 @@ export default function BookPage() {
     }
   }, [step, fetchAvailability])
 
+  const createHolds = useCallback(
+    async (slots: { start: string; end: string }[]) => {
+      try {
+        const res = await fetch("/api/slot-holds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slots }),
+        })
+        const data = await res.json()
+        if (res.ok && data.expiresAt) {
+          setHoldExpiresAt(data.expiresAt)
+        }
+      } catch {
+        // Hold creation is best-effort
+      }
+    },
+    []
+  )
+
+  const handleHoldExpired = useCallback(() => {
+    setHoldExpiresAt(null)
+    clearCart()
+    toast.error("Your held slots have expired")
+    fetchAvailability()
+  }, [clearCart, fetchAvailability])
+
   // Single booking: add to cart
   const handleAddToCart = () => {
     if (!selectedRate || selectedSlots.length === 0) return
@@ -108,6 +136,11 @@ export default function BookPage() {
       participantCount,
       isRecurring: false,
     })
+
+    // Collect all cart slots (existing + new) for hold
+    const existingSlots = cartItems.flatMap((item) => item.slots)
+    const allSlots = [...existingSlots, ...selectedSlots]
+    createHolds(allSlots)
 
     toast.success("Added to cart!")
     clearSlots()
@@ -161,6 +194,11 @@ export default function BookPage() {
       },
     })
 
+    // Collect all cart slots (existing + new) for hold
+    const existingSlots = cartItems.flatMap((item) => item.slots)
+    const holdSlots = [...existingSlots, ...allSlots]
+    createHolds(holdSlots)
+
     toast.success(
       `Added ${dates.length} recurring sessions to cart!`
     )
@@ -189,7 +227,15 @@ export default function BookPage() {
       <PageHeader
         title="Book a Session"
         description="Select your booking type, date, and time"
-        action={<CartDrawer />}
+        action={
+          <div className="flex items-center gap-3">
+            <HoldCountdown
+              expiresAt={holdExpiresAt}
+              onExpired={handleHoldExpired}
+            />
+            <CartDrawer />
+          </div>
+        }
       />
 
       {/* Progress steps */}

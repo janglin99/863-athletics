@@ -16,6 +16,7 @@ import {
   LogOut,
   Shield,
   UserCheck,
+  Wrench,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -32,6 +33,7 @@ const links = [
   { href: "/admin/access-codes", label: "Access Codes", icon: Key },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
   { href: "/admin/notifications", label: "Notifications", icon: Bell },
+  { href: "/admin/settings", label: "Settings", icon: Wrench },
 ]
 
 export function AdminSidebar() {

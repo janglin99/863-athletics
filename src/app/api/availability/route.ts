@@ -67,19 +67,34 @@ export async function GET(req: NextRequest) {
 
   const supabase = await createClient()
 
-  const [{ data: facilityHours }, { data: blocks }, { data: bookedSlots }] =
-    await Promise.all([
-      supabase.from("facility_hours").select("*").order("day_of_week"),
-      supabase
-        .from("availability_blocks")
-        .select("*")
-        .lte("start_time", endDate)
-        .gte("end_time", startDate),
-      supabase.rpc("get_booked_slots", {
-        check_start: startDate,
-        check_end: endDate,
-      }),
-    ])
+  // Get current user (optional — won't fail for unauthenticated users)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const [
+    { data: facilityHours },
+    { data: blocks },
+    { data: bookedSlots },
+    { data: activeHolds },
+  ] = await Promise.all([
+    supabase.from("facility_hours").select("*").order("day_of_week"),
+    supabase
+      .from("availability_blocks")
+      .select("*")
+      .lte("start_time", endDate)
+      .gte("end_time", startDate),
+    supabase.rpc("get_booked_slots", {
+      check_start: startDate,
+      check_end: endDate,
+    }),
+    supabase
+      .from("slot_holds")
+      .select("*")
+      .gt("expires_at", new Date().toISOString())
+      .lte("start_time", endDate)
+      .gte("end_time", startDate),
+  ])
 
   const availabilityMap: Record<
     string,
@@ -131,12 +146,19 @@ export async function GET(req: NextRequest) {
           new Date(booked.end_time) > slotStart
       )
 
+      const isHeld = activeHolds?.some(
+        (hold: { customer_id: string; start_time: string; end_time: string }) =>
+          hold.customer_id !== user?.id &&
+          new Date(hold.start_time) < slotEnd &&
+          new Date(hold.end_time) > slotStart
+      )
+
       const isPast = slotStart < new Date()
 
       slots.push({
         start: slotStart.toISOString(),
         end: slotEnd.toISOString(),
-        available: !isBlocked && !isBooked && !isPast,
+        available: !isBlocked && !isBooked && !isPast && !isHeld,
       })
 
       slotStart = slotEnd

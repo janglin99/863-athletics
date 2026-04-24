@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Elements } from "@stripe/react-stripe-js"
 import { getStripe } from "@/lib/stripe/client"
@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { ArrowLeft, Loader2, CreditCard, Smartphone, ClipboardCheck } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { HoldCountdown } from "@/components/booking/HoldCountdown"
 
 export default function CheckoutPage() {
   const { items, getTotalCents, clearCart } = useCartStore()
@@ -34,6 +35,7 @@ export default function CheckoutPage() {
   const [bookingNumber, setBookingNumber] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [isInHouseTrainer, setIsInHouseTrainer] = useState(false)
+  const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null)
 
   useEffect(() => {
     async function checkTrainerStatus() {
@@ -51,6 +53,44 @@ export default function CheckoutPage() {
     }
     checkTrainerStatus()
   }, [])
+
+  // Refresh hold on mount to reset the timer
+  useEffect(() => {
+    async function refreshHold() {
+      const allSlots = items.flatMap((item) => item.slots)
+      if (allSlots.length === 0) return
+      try {
+        const res = await fetch("/api/slot-holds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slots: allSlots }),
+        })
+        const data = await res.json()
+        if (res.ok && data.expiresAt) {
+          setHoldExpiresAt(data.expiresAt)
+        }
+      } catch {
+        // Best-effort
+      }
+    }
+    refreshHold()
+  }, [items])
+
+  const handleHoldExpired = useCallback(() => {
+    setHoldExpiresAt(null)
+    clearCart()
+    toast.error("Your held slots have expired")
+    router.push("/book")
+  }, [clearCart, router])
+
+  // Release holds after successful booking
+  const releaseHolds = async () => {
+    try {
+      await fetch("/api/slot-holds", { method: "DELETE" })
+    } catch {
+      // Best-effort
+    }
+  }
 
   const total = getTotalCents()
 
@@ -120,6 +160,7 @@ export default function CheckoutPage() {
     const booking = await createBooking("trainer_account")
     if (!booking) return
 
+    await releaseHolds()
     toast.success("Booking confirmed! Added to your monthly billing.")
     clearCart()
     router.push(`/book/confirmation?booking=${booking.booking_number}`)
@@ -129,6 +170,7 @@ export default function CheckoutPage() {
     const booking = await createBooking(paymentMethod)
     if (!booking) return
 
+    await releaseHolds()
     toast.success("Booking created! We'll confirm your payment shortly.")
     clearCart()
     router.push(`/book/confirmation?booking=${booking.booking_number}`)
@@ -149,7 +191,15 @@ export default function CheckoutPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <PageHeader title="Checkout" />
+      <PageHeader
+        title="Checkout"
+        action={
+          <HoldCountdown
+            expiresAt={holdExpiresAt}
+            onExpired={handleHoldExpired}
+          />
+        }
+      />
 
       <Link href="/book">
         <Button variant="ghost" size="sm" className="text-text-secondary mb-6">
@@ -285,6 +335,7 @@ export default function CheckoutPage() {
               >
                 <StripePaymentForm
                   onSuccess={() => {
+                    releaseHolds()
                     clearCart()
                     router.push(
                       `/book/confirmation?booking=${bookingNumber}`
