@@ -54,15 +54,30 @@ async function generateAccessCodesForBooking(
         is_offline_access_code: true,
       })
 
+      // algoPIN may not be in the create response — re-fetch to get it
+      let pinCode = accessCode.code
+      if (!pinCode) {
+        // Wait briefly then fetch the code
+        await new Promise((r) => setTimeout(r, 2000))
+        try {
+          const fetched = await seam.accessCodes.get({
+            access_code_id: accessCode.access_code_id,
+          })
+          pinCode = fetched.code
+        } catch {
+          // Will stay as GENERATING
+        }
+      }
+
       await supabase.from("access_codes").insert({
         booking_id: bookingId,
         booking_slot_id: session.slotId,
-        pin_code: accessCode.code || "GENERATING",
+        pin_code: pinCode || "GENERATING",
         seam_access_code_id: accessCode.access_code_id,
         seam_device_id: deviceId,
         valid_from: session.start.toISOString(),
         valid_until: session.end.toISOString(),
-        status: accessCode.code ? "active" : "pending",
+        status: pinCode ? "active" : "pending",
       })
     } catch (error: any) {
       await supabase.from("access_codes").insert({
