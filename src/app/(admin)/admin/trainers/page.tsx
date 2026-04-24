@@ -165,6 +165,8 @@ export default function AdminTrainersPage() {
           amountCents = (trainer.commission_rate || 0) * 100 * totalSessions
         } else if (trainer.commission_type === "flat_monthly") {
           amountCents = (trainer.commission_rate || 0) * 100
+        } else if (trainer.commission_type === "hourly") {
+          amountCents = Math.round((trainer.commission_rate || 0) * 100 * totalHours)
         }
         // percentage type shows "manual" — amount stays 0
 
@@ -355,6 +357,8 @@ export default function AdminTrainersPage() {
                         ? `${formatCents((trainer.commission_rate || 0) * 100)}/session`
                         : trainer.commission_type === "flat_monthly"
                         ? `${formatCents((trainer.commission_rate || 0) * 100)}/mo`
+                        : trainer.commission_type === "hourly"
+                        ? `${formatCents((trainer.commission_rate || 0) * 100)}/hr`
                         : `Rate: ${formatCents(trainer.facility_rate_cents || 0)}`}
                     </span>
                     <span className="text-xs text-text-muted">
@@ -554,6 +558,7 @@ export default function AdminTrainersPage() {
                       Flat per Session
                     </SelectItem>
                     <SelectItem value="flat_monthly">Flat Monthly</SelectItem>
+                    <SelectItem value="hourly">Hourly Rate</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -564,6 +569,8 @@ export default function AdminTrainersPage() {
                     ? "Commission Rate (%)"
                     : editCommissionType === "flat_per_session"
                     ? "Rate per Session ($)"
+                    : editCommissionType === "hourly"
+                    ? "Hourly Rate ($)"
                     : "Monthly Rate ($)"}
                 </Label>
                 <Input

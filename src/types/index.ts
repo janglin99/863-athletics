@@ -21,7 +21,7 @@ export interface Profile {
   trainer_type: "in_house" | "external" | null
   facility_rate_cents: number | null
   commission_rate: number | null
-  commission_type: "percentage" | "flat_per_session" | "flat_monthly" | null
+  commission_type: "percentage" | "flat_per_session" | "flat_monthly" | "hourly" | null
   created_at: string
   updated_at: string
 }
@@ -40,6 +40,20 @@ export interface TrainerInvoice {
   created_at: string
   updated_at: string
   trainer?: Profile
+  items?: InvoiceItem[]
+}
+
+export interface InvoiceItem {
+  id: string
+  invoice_id: string
+  booking_id: string
+  session_date: string
+  start_time: string
+  end_time: string
+  hours: number
+  rate_cents: number
+  amount_cents: number
+  created_at: string
 }
 
 export interface Rate {

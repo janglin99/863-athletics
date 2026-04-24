@@ -12,6 +12,7 @@ import {
   LogOut,
   Dumbbell,
   Shield,
+  FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -28,6 +29,7 @@ export function PortalSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isTrainer, setIsTrainer] = useState(false)
 
   useEffect(() => {
     async function checkRole() {
@@ -45,6 +47,9 @@ export function PortalSidebar() {
 
       if (profile && ["admin", "staff"].includes(profile.role)) {
         setIsAdmin(true)
+      }
+      if (profile && profile.role === "trainer") {
+        setIsTrainer(true)
       }
     }
     checkRole()
@@ -84,6 +89,20 @@ export function PortalSidebar() {
             </Link>
           )
         })}
+        {isTrainer && (
+          <Link
+            href="/invoices"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+              pathname.startsWith("/invoices")
+                ? "bg-brand-orange/10 text-brand-orange"
+                : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+            )}
+          >
+            <FileText className="h-5 w-5" />
+            Invoices
+          </Link>
+        )}
       </nav>
 
       <div className="border-t border-border pt-4 mt-4 space-y-1">
