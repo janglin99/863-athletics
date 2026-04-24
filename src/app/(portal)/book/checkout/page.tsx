@@ -9,16 +9,14 @@ import {
   StripePaymentForm,
   stripeAppearance,
 } from "@/components/payment/StripePaymentForm"
-import { ManualPaymentInstructions } from "@/components/payment/ManualPaymentInstructions"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { formatCents, formatTime, formatDate } from "@/lib/utils/format"
 import { toast } from "sonner"
-import { ArrowLeft, Loader2, CreditCard, Smartphone, ClipboardCheck } from "lucide-react"
+import { ArrowLeft, Loader2, CreditCard, ClipboardCheck } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { HoldCountdown } from "@/components/booking/HoldCountdown"
@@ -27,7 +25,6 @@ export default function CheckoutPage() {
   const { items, getTotalCents, clearCart } = useCartStore()
   const router = useRouter()
 
-  const [paymentMethod, setPaymentMethod] = useState("stripe")
   const [waiverConfirmed, setWaiverConfirmed] = useState(false)
   const [notes, setNotes] = useState("")
   const [clientSecret, setClientSecret] = useState<string | null>(null)
@@ -166,15 +163,7 @@ export default function CheckoutPage() {
     router.push(`/book/confirmation?booking=${booking.booking_number}`)
   }
 
-  const handleManualPaymentSent = async () => {
-    const booking = await createBooking(paymentMethod)
-    if (!booking) return
 
-    await releaseHolds()
-    toast.success("Booking created! We'll confirm your payment shortly.")
-    clearCart()
-    router.push(`/book/confirmation?booking=${booking.booking_number}`)
-  }
 
   if (items.length === 0) {
     return (
@@ -309,77 +298,41 @@ export default function CheckoutPage() {
           </Button>
         </div>
       ) : (
-        <Tabs value={paymentMethod} onValueChange={setPaymentMethod}>
-          <TabsList className="bg-bg-secondary w-full">
-            <TabsTrigger value="stripe" className="flex-1">
-              <CreditCard className="h-4 w-4 mr-2" />
-              Card / Apple Pay
-            </TabsTrigger>
-            <TabsTrigger value="zelle" className="flex-1">
-              Zelle
-            </TabsTrigger>
-            <TabsTrigger value="cash_app" className="flex-1">
-              <Smartphone className="h-4 w-4 mr-2" />
-              Cash App
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="stripe" className="mt-6">
-            {clientSecret ? (
-              <Elements
-                stripe={getStripe()}
-                options={{
-                  clientSecret,
-                  appearance: stripeAppearance,
+        <div>
+          {clientSecret ? (
+            <Elements
+              stripe={getStripe()}
+              options={{
+                clientSecret,
+                appearance: stripeAppearance,
+              }}
+            >
+              <StripePaymentForm
+                onSuccess={() => {
+                  releaseHolds()
+                  clearCart()
+                  router.push(
+                    `/book/confirmation?booking=${bookingNumber}`
+                  )
                 }}
-              >
-                <StripePaymentForm
-                  onSuccess={() => {
-                    releaseHolds()
-                    clearCart()
-                    router.push(
-                      `/book/confirmation?booking=${bookingNumber}`
-                    )
-                  }}
-                  bookingNumber={bookingNumber}
-                />
-              </Elements>
-            ) : (
-              <Button
-                onClick={handleStripeCheckout}
-                disabled={loading || !waiverConfirmed}
-                className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-6"
-              >
-                {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CreditCard className="mr-2 h-4 w-4" />
-                )}
-                Pay {formatCents(total)}
-              </Button>
-            )}
-          </TabsContent>
-
-          <TabsContent value="zelle" className="mt-6">
-            <ManualPaymentInstructions
-              method="zelle"
-              amount={total}
-              bookingNumber={bookingNumber || "BK------"}
-              onConfirmSent={handleManualPaymentSent}
-              loading={loading}
-            />
-          </TabsContent>
-
-          <TabsContent value="cash_app" className="mt-6">
-            <ManualPaymentInstructions
-              method="cash_app"
-              amount={total}
-              bookingNumber={bookingNumber || "BK------"}
-              onConfirmSent={handleManualPaymentSent}
-              loading={loading}
-            />
-          </TabsContent>
-        </Tabs>
+                bookingNumber={bookingNumber}
+              />
+            </Elements>
+          ) : (
+            <Button
+              onClick={handleStripeCheckout}
+              disabled={loading || !waiverConfirmed}
+              className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-6"
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CreditCard className="mr-2 h-4 w-4" />
+              )}
+              Pay {formatCents(total)}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   )
