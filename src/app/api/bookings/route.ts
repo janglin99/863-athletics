@@ -153,6 +153,20 @@ export async function POST(req: NextRequest) {
           confirmed_at: new Date().toISOString(),
         })
         .eq("id", booking.id)
+
+      // Generate access codes for trainer bookings
+      if (process.env.SEAM_API_KEY && process.env.SEAM_IGLOOHOME_DEVICE_ID) {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://863athletics.com"
+          await fetch(`${baseUrl}/api/access-codes/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bookingId: booking.id }),
+          })
+        } catch {
+          // Best-effort — admin can generate manually
+        }
+      }
     }
   }
 
