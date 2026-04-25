@@ -202,6 +202,29 @@ export interface AccessCode {
   updated_at: string
 }
 
+export interface UserCredit {
+  id: string
+  customer_id: string
+  credit_type: "dollar" | "hours" | "sessions"
+  original_amount: number
+  remaining_amount: number
+  description: string | null
+  expires_at: string | null
+  granted_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreditTransaction {
+  id: string
+  credit_id: string
+  booking_id: string | null
+  amount: number
+  type: "grant" | "use" | "refund" | "expire" | "adjust"
+  notes: string | null
+  created_at: string
+}
+
 export interface TimeSlot {
   start: string
   end: string

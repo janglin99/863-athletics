@@ -18,12 +18,15 @@ import {
   ClipboardList,
   Key,
   ArrowRight,
+  DollarSign,
+  Ticket,
 } from "lucide-react"
-import type { Booking, Profile } from "@/types"
+import type { Booking, Profile, UserCredit } from "@/types"
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [upcoming, setUpcoming] = useState<Booking[]>([])
+  const [credits, setCredits] = useState<UserCredit[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -48,6 +51,12 @@ export default function DashboardPage() {
 
       setProfile(profileData)
       setUpcoming(bookingsData || [])
+
+      // Load credits
+      const creditsRes = await fetch("/api/credits")
+      const creditsData = await creditsRes.json()
+      setCredits(creditsData.credits || [])
+
       setLoading(false)
     }
     load()
@@ -136,6 +145,69 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Your Credits */}
+      {credits.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-display font-bold uppercase tracking-wide mb-4">
+            Your Credits
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {credits.map((credit) => {
+              const typeColor =
+                credit.credit_type === "dollar"
+                  ? "text-success"
+                  : credit.credit_type === "hours"
+                    ? "text-brand-steel"
+                    : "text-brand-orange"
+              const bgColor =
+                credit.credit_type === "dollar"
+                  ? "bg-success/10"
+                  : credit.credit_type === "hours"
+                    ? "bg-brand-steel/10"
+                    : "bg-brand-orange/10"
+              const TypeIcon =
+                credit.credit_type === "dollar"
+                  ? DollarSign
+                  : credit.credit_type === "hours"
+                    ? Clock
+                    : Ticket
+
+              return (
+                <Card key={credit.id} className="bg-bg-secondary border-border">
+                  <CardContent className="pt-5 pb-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`rounded-md ${bgColor} p-2`}>
+                        <TypeIcon className={`h-4 w-4 ${typeColor}`} />
+                      </div>
+                      <div>
+                        <p className={`text-lg font-display font-bold ${typeColor}`}>
+                          {credit.credit_type === "dollar"
+                            ? `$${Number(credit.remaining_amount).toFixed(2)}`
+                            : credit.credit_type === "hours"
+                              ? `${Number(credit.remaining_amount)} hrs`
+                              : `${Number(credit.remaining_amount)} sessions`}
+                        </p>
+                        <p className="text-xs text-text-secondary capitalize">
+                          {credit.credit_type} credit
+                        </p>
+                      </div>
+                    </div>
+                    {credit.description && (
+                      <p className="text-xs text-text-muted">{credit.description}</p>
+                    )}
+                    {credit.expires_at && (
+                      <p className="text-xs text-text-muted mt-1">
+                        Expires {new Date(credit.expires_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Upcoming bookings */}
       <div>
