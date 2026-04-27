@@ -19,7 +19,7 @@ import {
 } from "@/lib/utils/format"
 import { toast } from "sonner"
 import { RefreshCw, ArrowRight, AlertCircle } from "lucide-react"
-import { format, addDays } from "date-fns"
+import { format, startOfDay } from "date-fns"
 import type { Booking, TimeSlot } from "@/types"
 
 interface RescheduleModalProps {
@@ -51,15 +51,18 @@ export function RescheduleModal({
     { start: string; end: string }[]
   >([])
   const [submitting, setSubmitting] = useState(false)
+  const [cutoff, setCutoff] = useState<Date | null>(null)
 
-  // Fetch fee info when modal opens
+  // Fetch fee info + cutoff when modal opens
   useEffect(() => {
     if (open) {
       setFeeInfo(null)
       setSelectedDate(undefined)
       setSlots([])
       setSelectedSlots([])
+      setCutoff(null)
       fetchFeeInfo()
+      fetchCutoff()
     }
   }, [open])
 
@@ -82,6 +85,23 @@ export function RescheduleModal({
     setLoadingFee(false)
   }
 
+  async function fetchCutoff() {
+    if (!booking.rate_id) return
+    try {
+      const today = format(new Date(), "yyyy-MM-dd")
+      const params = new URLSearchParams({
+        start: `${today}T00:00:00.000Z`,
+        end: `${today}T00:00:00.000Z`,
+        rateId: booking.rate_id,
+      })
+      const res = await fetch(`/api/availability?${params.toString()}`)
+      const data = await res.json()
+      if (data.cutoff) setCutoff(new Date(data.cutoff))
+    } catch {
+      // best-effort — calendar falls back to "today" minimum
+    }
+  }
+
   async function fetchSlots(date: Date) {
     setLoadingSlots(true)
     setSelectedSlots([])
@@ -90,12 +110,13 @@ export function RescheduleModal({
     const end = `${dateKey}T23:59:59.999Z`
 
     try {
-      const res = await fetch(
-        `/api/availability?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
-      )
+      const params = new URLSearchParams({ start, end })
+      if (booking.rate_id) params.set("rateId", booking.rate_id)
+      const res = await fetch(`/api/availability?${params.toString()}`)
       const data = await res.json()
       const dayData = data.availability?.[dateKey]
       setSlots(dayData?.slots || [])
+      if (data.cutoff) setCutoff(new Date(data.cutoff))
     } catch {
       toast.error("Failed to fetch availability")
       setSlots([])
@@ -234,7 +255,9 @@ export function RescheduleModal({
                   mode="single"
                   selected={selectedDate}
                   onSelect={setSelectedDate}
-                  disabled={(date) => date < new Date()}
+                  disabled={(date) =>
+                    date < (cutoff ? startOfDay(cutoff) : startOfDay(new Date()))
+                  }
                   className="rounded-md border border-border bg-bg-elevated"
                 />
               </div>

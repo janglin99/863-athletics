@@ -69,6 +69,17 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  const advanceNoticeHours = rate.advance_notice_hours ?? 0
+  const cutoff = new Date(Date.now() + advanceNoticeHours * 3600000)
+  const tooSoon = data.slots.some((s) => new Date(s.start) < cutoff)
+  if (tooSoon) {
+    const message =
+      advanceNoticeHours <= 0
+        ? "Selected time has already passed"
+        : `${rate.name} requires ${advanceNoticeHours}h advance notice — pick a later time`
+    return NextResponse.json({ error: message }, { status: 400 })
+  }
+
   // Calculate total hours from slot durations
   const totalMs = data.slots.reduce((ms, slot) => {
     return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())

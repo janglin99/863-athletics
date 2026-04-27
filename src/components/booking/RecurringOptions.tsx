@@ -45,6 +45,7 @@ interface RecurringOptionsProps {
   onChange: (config: RecurringConfig) => void
   priceCentsPerHour: number
   availability: AvailabilityMap
+  minDate?: Date
 }
 
 export function getRecurringDates(config: RecurringConfig): Date[] {
@@ -88,9 +89,12 @@ export function RecurringOptions({
   onChange,
   priceCentsPerHour,
   availability,
+  minDate,
 }: RecurringOptionsProps) {
   const update = (partial: Partial<RecurringConfig>) =>
     onChange({ ...config, ...partial })
+
+  const earliest = minDate ?? startOfDay(new Date())
 
   const recurringDates = getRecurringDates(config)
   const totalHoursPerSession = (config.timeSlots.length * 0.5) || 0.5
@@ -308,7 +312,7 @@ export function RecurringOptions({
                       mode="single"
                       selected={config.startDate}
                       onSelect={(d) => d && update({ startDate: d })}
-                      disabled={(d) => d < new Date()}
+                      disabled={(d) => d < earliest}
                     />
                   </PopoverContent>
                 </Popover>

@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
   const startDate = searchParams.get("start") || new Date().toISOString()
   const endDate =
     searchParams.get("end") || addDays(new Date(), 30).toISOString()
+  const rateId = searchParams.get("rateId")
 
   const supabase = await createClient()
 
@@ -72,11 +73,20 @@ export async function GET(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  const ratePromise = rateId
+    ? supabase
+        .from("rates")
+        .select("advance_notice_hours")
+        .eq("id", rateId)
+        .single()
+    : Promise.resolve({ data: null })
+
   const [
     { data: facilityHours },
     { data: blocks },
     { data: bookedSlots },
     { data: activeHolds },
+    { data: rate },
   ] = await Promise.all([
     supabase.from("facility_hours").select("*").order("day_of_week"),
     supabase
@@ -94,7 +104,11 @@ export async function GET(req: NextRequest) {
       .gt("expires_at", new Date().toISOString())
       .lte("start_time", endDate)
       .gte("end_time", startDate),
+    ratePromise,
   ])
+
+  const advanceNoticeHours = rate?.advance_notice_hours ?? 0
+  const cutoff = new Date(Date.now() + advanceNoticeHours * 3600000)
 
   const availabilityMap: Record<
     string,
@@ -153,12 +167,12 @@ export async function GET(req: NextRequest) {
           new Date(hold.end_time) > slotStart
       )
 
-      const isPast = slotStart < new Date()
+      const isBeforeCutoff = slotStart < cutoff
 
       slots.push({
         start: slotStart.toISOString(),
         end: slotEnd.toISOString(),
-        available: !isBlocked && !isBooked && !isPast && !isHeld,
+        available: !isBlocked && !isBooked && !isBeforeCutoff && !isHeld,
       })
 
       slotStart = slotEnd
@@ -168,5 +182,9 @@ export async function GET(req: NextRequest) {
     current = addDays(current, 1)
   }
 
-  return NextResponse.json({ availability: availabilityMap })
+  return NextResponse.json({
+    availability: availabilityMap,
+    cutoff: cutoff.toISOString(),
+    advanceNoticeHours,
+  })
 }

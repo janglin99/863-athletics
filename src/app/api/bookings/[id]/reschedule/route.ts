@@ -23,10 +23,10 @@ export async function POST(
     )
   }
 
-  // Fetch booking with slots
+  // Fetch booking with slots and rate (for advance notice)
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
-    .select("*, slots:booking_slots(*)")
+    .select("*, rate:rates(name, advance_notice_hours), slots:booking_slots(*)")
     .eq("id", id)
     .single()
 
@@ -100,13 +100,16 @@ export async function POST(
     feeName = matchedTier.name
   }
 
-  // Verify new slots are in the future
+  // Verify new slots respect the rate's advance-notice window
+  const advanceNoticeHours = booking.rate?.advance_notice_hours ?? 0
+  const cutoff = new Date(Date.now() + advanceNoticeHours * 3600000)
   for (const slot of newSlots) {
-    if (new Date(slot.start) < new Date()) {
-      return NextResponse.json(
-        { error: "New time slots must be in the future" },
-        { status: 400 }
-      )
+    if (new Date(slot.start) < cutoff) {
+      const message =
+        advanceNoticeHours <= 0
+          ? "New time slots must be in the future"
+          : `${booking.rate?.name ?? "This rate"} requires ${advanceNoticeHours}h advance notice — pick a later time`
+      return NextResponse.json({ error: message }, { status: 400 })
     }
   }
 

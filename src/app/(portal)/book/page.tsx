@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCents } from "@/lib/utils/format"
-import { format, addDays, addWeeks } from "date-fns"
+import { format, addDays, addWeeks, startOfDay } from "date-fns"
 import { toast } from "sonner"
 import {
   ArrowLeft,
@@ -58,6 +58,7 @@ export default function BookPage() {
 
   const [rates, setRates] = useState<Rate[]>([])
   const [availability, setAvailability] = useState<AvailabilityMap>({})
+  const [cutoff, setCutoff] = useState<Date | null>(null)
   const [rateFilter, setRateFilter] = useState("")
   const [loadingRates, setLoadingRates] = useState(true)
   const [loadingSlots, setLoadingSlots] = useState(false)
@@ -80,21 +81,26 @@ export default function BookPage() {
     fetchRates()
   }, [])
 
-  const fetchAvailability = useCallback(async () => {
+  const fetchAvailability = useCallback(async (rateId?: string) => {
     setLoadingSlots(true)
     const start = new Date().toISOString()
     const end = addDays(new Date(), 90).toISOString()
-    const res = await fetch(`/api/availability?start=${start}&end=${end}`)
+    const params = new URLSearchParams({ start, end })
+    if (rateId) params.set("rateId", rateId)
+    const res = await fetch(`/api/availability?${params.toString()}`)
     const data = await res.json()
     setAvailability(data.availability || {})
+    setCutoff(data.cutoff ? new Date(data.cutoff) : null)
     setLoadingSlots(false)
   }, [])
 
   useEffect(() => {
     if (step >= 2) {
-      fetchAvailability()
+      fetchAvailability(selectedRate?.id)
     }
-  }, [step, fetchAvailability])
+  }, [step, selectedRate?.id, fetchAvailability])
+
+  const minBookingDate = cutoff ? startOfDay(cutoff) : startOfDay(new Date())
 
   const createHolds = useCallback(
     async (slots: { start: string; end: string }[]) => {
@@ -119,8 +125,8 @@ export default function BookPage() {
     setHoldExpiresAt(null)
     clearCart()
     toast.error("Your held slots have expired")
-    fetchAvailability()
-  }, [clearCart, fetchAvailability])
+    fetchAvailability(selectedRate?.id)
+  }, [clearCart, fetchAvailability, selectedRate?.id])
 
   // Single booking: add to cart
   const handleAddToCart = () => {
@@ -321,6 +327,7 @@ export default function BookPage() {
             onChange={setRecurringConfig}
             priceCentsPerHour={selectedRate?.price_cents || 0}
             availability={availability}
+            minDate={minBookingDate}
           />
 
           {/* Recurring: Add to cart button */}
@@ -346,7 +353,7 @@ export default function BookPage() {
                   mode="single"
                   selected={selectedDate || undefined}
                   onSelect={(date) => date && setSelectedDate(date)}
-                  disabled={(date) => date < new Date()}
+                  disabled={(date) => date < minBookingDate}
                   className="rounded-lg border border-border bg-bg-secondary"
                 />
               </div>
