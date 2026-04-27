@@ -64,6 +64,43 @@ export const TOOLS: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "update_profile",
+    description:
+      "Update one or more low-risk profile fields for the signed-in customer: first/last name, phone, emergency contact, notification preferences. Cannot change email (use a separate flow), role, credits, waiver, or any financial fields. Pass only the fields you want to change — omit anything that should stay the same. Always summarize the change and get the customer's verbal confirmation BEFORE calling this tool.",
+    input_schema: {
+      type: "object",
+      properties: {
+        first_name: { type: "string", description: "New first name" },
+        last_name: { type: "string", description: "New last name" },
+        phone: {
+          type: "string",
+          description:
+            "New phone number (any format the customer types — store as-is)",
+        },
+        emergency_name: {
+          type: "string",
+          description: "Emergency contact's name",
+        },
+        emergency_phone: {
+          type: "string",
+          description: "Emergency contact's phone",
+        },
+        notification_email: {
+          type: "boolean",
+          description: "Receive booking confirmations and updates by email",
+        },
+        notification_sms: {
+          type: "boolean",
+          description: "Receive access codes and reminders by SMS",
+        },
+        notification_reminders: {
+          type: "boolean",
+          description: "Receive 24h and 1h pre-session reminders",
+        },
+      },
+    },
+  },
+  {
     name: "get_availability_summary",
     description:
       "Returns a per-day summary of available slots over a date range, optionally for a specific rate. Each entry contains the date, weekday, total slot count, and available slot count. Use this to answer 'do you have anything open on X' or 'when's the next opening'.",
@@ -259,6 +296,47 @@ export async function executeTool(
       return JSON.stringify({
         cutoff: json.cutoff ?? null,
         days: summary,
+      })
+    }
+
+    case "update_profile": {
+      const allowed = [
+        "first_name",
+        "last_name",
+        "phone",
+        "emergency_name",
+        "emergency_phone",
+        "notification_email",
+        "notification_sms",
+        "notification_reminders",
+      ] as const
+
+      const updates: Record<string, unknown> = {}
+      for (const field of allowed) {
+        if (input[field] !== undefined && input[field] !== null) {
+          updates[field] = input[field]
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return JSON.stringify({
+          error: "No updatable fields were provided",
+        })
+      }
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", userId)
+
+      if (error) {
+        return JSON.stringify({ error: error.message })
+      }
+
+      return JSON.stringify({
+        success: true,
+        updated_fields: Object.keys(updates),
+        new_values: updates,
       })
     }
 
