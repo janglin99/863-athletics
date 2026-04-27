@@ -32,6 +32,25 @@ export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY_863Ath })
   const messages: Anthropic.MessageParam[] = [...body.messages]
 
+  const todayContext = (() => {
+    const tz = "America/New_York"
+    const now = new Date()
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+    const iso = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now)
+    return `Today is ${fmt.format(now)} (${iso} in ISO format). Local timezone: ${tz}.`
+  })()
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await client.messages.create({
       model: "claude-opus-4-7",
@@ -42,6 +61,7 @@ export async function POST(req: NextRequest) {
           text: SYSTEM_PROMPT,
           cache_control: { type: "ephemeral" },
         },
+        { type: "text", text: todayContext },
       ],
       tools: TOOLS,
       messages,

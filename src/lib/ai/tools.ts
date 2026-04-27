@@ -101,9 +101,39 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_available_slots",
+    description:
+      "Returns the actual available time slots for a single day, optionally filtered by rate and time-of-day. Use this whenever the customer asks about specific times on a specific day ('what's open Wednesday after 12pm', 'do you have a 5pm slot Friday'). For broad date-range scoping ('what days have anything next week'), use get_availability_summary instead.",
+    input_schema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          description:
+            "Date in YYYY-MM-DD format. Required. Default ambiguous dates (e.g., '4/29' with no year) to the next future occurrence relative to today.",
+        },
+        rateId: {
+          type: "string",
+          description: "Optional rate UUID. Look up via get_rates first.",
+        },
+        afterTime: {
+          type: "string",
+          description:
+            "Optional 24-hour HH:MM. Only return slots that start at or after this local time.",
+        },
+        beforeTime: {
+          type: "string",
+          description:
+            "Optional 24-hour HH:MM. Only return slots that start strictly before this local time.",
+        },
+      },
+      required: ["date"],
+    },
+  },
+  {
     name: "get_availability_summary",
     description:
-      "Returns a per-day summary of available slots over a date range, optionally for a specific rate. Each entry contains the date, weekday, total slot count, and available slot count. Use this to answer 'do you have anything open on X' or 'when's the next opening'.",
+      "Returns a per-day summary of available slot COUNTS (not specific times) over a date range, optionally for a specific rate. Use this to answer 'do you have anything open this week' or 'when's the next opening'. For specific times on a specific day, use get_available_slots instead.",
     input_schema: {
       type: "object",
       properties: {
@@ -257,6 +287,70 @@ export async function executeTool(
         price: fmtCents(r.price_cents),
       }))
       return JSON.stringify({ count: shaped.length, rates: shaped })
+    }
+
+    case "get_available_slots": {
+      const date = input.date as string
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return JSON.stringify({
+          error: "date must be in YYYY-MM-DD format",
+        })
+      }
+      const rateId = input.rateId as string | undefined
+      const afterTime = (input.afterTime as string | undefined) ?? "00:00"
+      const beforeTime = (input.beforeTime as string | undefined) ?? "23:59"
+
+      const start = new Date(`${date}T00:00:00.000Z`).toISOString()
+      const end = new Date(`${date}T23:59:59.999Z`).toISOString()
+      const params = new URLSearchParams({ start, end })
+      if (rateId) params.set("rateId", rateId)
+      const baseUrl =
+        process.env.NEXT_PUBLIC_APP_URL || "https://863athletics.com"
+      const res = await fetch(`${baseUrl}/api/availability?${params.toString()}`)
+      if (!res.ok) {
+        return JSON.stringify({ error: "Could not load availability" })
+      }
+      const json = (await res.json()) as {
+        availability: Record<
+          string,
+          {
+            date: string
+            slots: Array<{ start: string; end: string; available: boolean }>
+          }
+        >
+      }
+      const day = json.availability[date]
+      if (!day) {
+        return JSON.stringify({
+          date,
+          weekday: DAY_NAMES[new Date(`${date}T12:00:00`).getUTCDay()],
+          available_slots: [],
+        })
+      }
+
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+
+      const filtered = day.slots
+        .filter((s) => s.available)
+        .map((s) => {
+          const startLocal = formatter.format(new Date(s.start))
+          const endLocal = formatter.format(new Date(s.end))
+          return { start_local: startLocal, end_local: endLocal }
+        })
+        .filter((s) => s.start_local >= afterTime && s.start_local < beforeTime)
+
+      return JSON.stringify({
+        date,
+        weekday: DAY_NAMES[new Date(`${date}T12:00:00`).getUTCDay()],
+        timezone: "America/New_York",
+        count: filtered.length,
+        available_slots: filtered,
+      })
     }
 
     case "get_availability_summary": {
