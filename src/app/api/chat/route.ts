@@ -7,7 +7,7 @@ import { TOOLS, executeTool } from "@/lib/ai/tools"
 const MAX_ITERATIONS = 8
 
 export async function POST(req: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY_863Ath) {
     return NextResponse.json(
       { error: "AI assistant is not configured" },
       { status: 503 }
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "messages required" }, { status: 400 })
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY_863Ath })
   const messages: Anthropic.MessageParam[] = [...body.messages]
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
