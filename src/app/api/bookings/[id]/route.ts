@@ -71,16 +71,29 @@ export async function DELETE(
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { error } = await supabase
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  const isAdmin = profile && ["admin", "staff"].includes(profile.role)
+
+  let query = supabase
     .from("bookings")
     .update({
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
       cancelled_by: user.id,
-      cancel_initiated_by: "customer",
+      cancel_initiated_by: isAdmin ? "admin" : "customer",
     })
     .eq("id", id)
-    .eq("customer_id", user.id)
+
+  if (!isAdmin) {
+    query = query.eq("customer_id", user.id)
+  }
+
+  const { error } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

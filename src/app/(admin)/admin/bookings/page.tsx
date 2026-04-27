@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { PageHeader } from "@/components/shared/PageHeader"
@@ -12,8 +12,10 @@ import {
   BookingStatusBadge,
   PaymentStatusBadge,
 } from "@/components/booking/BookingStatusBadge"
+import { AdminCreateBookingDialog } from "@/components/admin/AdminCreateBookingDialog"
+import { AdminBookingCalendar } from "@/components/admin/AdminBookingCalendar"
 import { formatCents, formatDateTime } from "@/lib/utils/format"
-import { Search } from "lucide-react"
+import { Search, List, Calendar as CalendarIcon } from "lucide-react"
 import type { Booking } from "@/types"
 
 export default function AdminBookingsPage() {
@@ -21,23 +23,28 @@ export default function AdminBookingsPage() {
   const [filter, setFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<"list" | "calendar">("list")
+
+  const loadBookings = useCallback(async () => {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from("bookings")
+      .select(
+        "*, customer:profiles!customer_id(first_name, last_name, email), rate:rates(name), slots:booking_slots(*)"
+      )
+      .order("created_at", { ascending: false })
+      .limit(100)
+
+    setBookings(data || [])
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from("bookings")
-        .select(
-          "*, customer:profiles!customer_id(first_name, last_name, email), rate:rates(name), slots:booking_slots(*)"
-        )
-        .order("created_at", { ascending: false })
-        .limit(100)
-
-      setBookings(data || [])
-      setLoading(false)
+    async function run() {
+      await loadBookings()
     }
-    load()
-  }, [])
+    run()
+  }, [loadBookings])
 
   const filtered = bookings
     .filter((b) => {
@@ -63,36 +70,58 @@ export default function AdminBookingsPage() {
       <PageHeader
         title="All Bookings"
         description="Manage customer bookings"
+        action={<AdminCreateBookingDialog onCreated={loadBookings} />}
       />
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
-          <Input
-            placeholder="Search by name, email, or booking #..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-bg-elevated border-border"
-          />
-        </div>
-        <Tabs value={filter} onValueChange={setFilter}>
-          <TabsList className="bg-bg-secondary">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="confirmed">Confirmed</TabsTrigger>
-            <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      <Tabs
+        value={view}
+        onValueChange={(v) => v && setView(v as "list" | "calendar")}
+        className="mb-6"
+      >
+        <TabsList className="bg-bg-secondary">
+          <TabsTrigger value="list">
+            <List className="h-3.5 w-3.5 mr-1.5" />
+            List
+          </TabsTrigger>
+          <TabsTrigger value="calendar">
+            <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
+            Calendar
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 bg-bg-elevated rounded-lg" />
-          ))}
-        </div>
+      {view === "calendar" ? (
+        <AdminBookingCalendar />
       ) : (
-        <div className="space-y-2">
+        <>
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
+              <Input
+                placeholder="Search by name, email, or booking #..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 bg-bg-elevated border-border"
+              />
+            </div>
+            <Tabs value={filter} onValueChange={(v) => v && setFilter(v)}>
+              <TabsList className="bg-bg-secondary">
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
+                <TabsTrigger value="confirmed">Confirmed</TabsTrigger>
+                <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 bg-bg-elevated rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
           {filtered.map((booking) => {
             const firstSlot = booking.slots?.[0]
             return (
@@ -130,12 +159,14 @@ export default function AdminBookingsPage() {
             )
           })}
 
-          {filtered.length === 0 && (
-            <p className="text-text-secondary text-center py-8">
-              No bookings found
-            </p>
+              {filtered.length === 0 && (
+                <p className="text-text-secondary text-center py-8">
+                  No bookings found
+                </p>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   )

@@ -15,6 +15,7 @@ import type { Profile } from "@/types"
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [originalEmail, setOriginalEmail] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -33,6 +34,7 @@ export default function ProfilePage() {
         .single()
 
       setProfile(data)
+      setOriginalEmail(data?.email ?? "")
       setLoading(false)
     }
     load()
@@ -59,6 +61,26 @@ export default function ProfilePage() {
 
     if (error) {
       toast.error("Failed to save profile")
+      setSaving(false)
+      return
+    }
+
+    const emailChanged =
+      profile.email.trim().toLowerCase() !== originalEmail.trim().toLowerCase()
+
+    if (emailChanged) {
+      const { error: emailError } = await supabase.auth.updateUser({
+        email: profile.email.trim(),
+      })
+      if (emailError) {
+        toast.error(`Profile saved, but email change failed: ${emailError.message}`)
+        setProfile({ ...profile, email: originalEmail })
+        setSaving(false)
+        return
+      }
+      toast.success(
+        `Confirmation sent to ${profile.email.trim()}. Click the link in that email to finish the change.`
+      )
     } else {
       toast.success("Profile updated!")
     }
@@ -111,7 +133,15 @@ export default function ProfilePage() {
             </div>
             <div className="space-y-2">
               <Label>Email</Label>
-              <Input value={profile.email} disabled className="bg-bg-primary border-border opacity-60" />
+              <Input
+                type="email"
+                value={profile.email}
+                onChange={(e) => update("email", e.target.value)}
+                className="bg-bg-elevated border-border"
+              />
+              <p className="text-xs text-text-secondary">
+                Changing your email sends a confirmation link to the new address. The change takes effect after you click that link.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Phone</Label>
