@@ -216,6 +216,8 @@ export async function executeTool(
           const firstStart = activeSlots[0]?.start_time
           const lastEnd = activeSlots[activeSlots.length - 1]?.end_time
           return {
+            id: b.id,
+            detail_url: `/bookings/${b.id}`,
             booking_number: b.booking_number,
             status: b.status,
             payment_status: b.payment_status,

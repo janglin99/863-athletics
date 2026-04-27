@@ -1,10 +1,73 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MessageCircle, X, Send, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+const MARKDOWN_PATTERN = /(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|`[^`]+`)/g
+
+function MarkdownText({
+  text,
+  onLinkClick,
+}: {
+  text: string
+  onLinkClick: () => void
+}) {
+  const parts = text.split(MARKDOWN_PATTERN)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (!part) return null
+        const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part)
+        if (linkMatch) {
+          const [, label, href] = linkMatch
+          if (href.startsWith("/")) {
+            return (
+              <Link
+                key={i}
+                href={href}
+                onClick={onLinkClick}
+                className="text-brand-orange underline underline-offset-2 hover:text-brand-orange-dark"
+              >
+                {label}
+              </Link>
+            )
+          }
+          if (href.startsWith("http://") || href.startsWith("https://")) {
+            return (
+              <a
+                key={i}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-orange underline underline-offset-2 hover:text-brand-orange-dark"
+              >
+                {label}
+              </a>
+            )
+          }
+          return label
+        }
+        const boldMatch = /^\*\*([^*]+)\*\*$/.exec(part)
+        if (boldMatch) return <strong key={i}>{boldMatch[1]}</strong>
+        const codeMatch = /^`([^`]+)`$/.exec(part)
+        if (codeMatch)
+          return (
+            <code
+              key={i}
+              className="bg-bg-primary border border-border rounded px-1 text-xs"
+            >
+              {codeMatch[1]}
+            </code>
+          )
+        return <span key={i}>{part}</span>
+      })}
+    </>
+  )
+}
 
 interface ChatTurn {
   role: "user" | "assistant"
@@ -18,7 +81,7 @@ interface ApiMessage {
 
 const INTRO: ChatTurn = {
   role: "assistant",
-  text: "Hey — I'm the 863 Athletics assistant. I can look up your bookings, credit balance, our rates and hours, and what's available to book. What can I help with?",
+  text: "Hey — I'm the 863 Athletics assistant. I can look up your bookings, credit balance, our rates and hours, and what's available to [book](/book). What can I help with?",
 }
 
 export function ChatWidget() {
@@ -143,7 +206,14 @@ export function ChatWidget() {
                       : "bg-bg-elevated text-text-primary border border-border"
                   )}
                 >
-                  {t.text}
+                  {t.role === "assistant" ? (
+                    <MarkdownText
+                      text={t.text}
+                      onLinkClick={() => setOpen(false)}
+                    />
+                  ) : (
+                    t.text
+                  )}
                 </div>
               </div>
             ))}
