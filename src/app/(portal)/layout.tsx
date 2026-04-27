@@ -1,6 +1,7 @@
 import { PortalSidebar } from "@/components/layout/PortalSidebar"
 import { MobileNav } from "@/components/layout/MobileNav"
 import { FloatingCartButton } from "@/components/cart/FloatingCartButton"
+import { ChatWidget } from "@/components/chat/ChatWidget"
 
 export default function PortalLayout({
   children,
@@ -15,6 +16,7 @@ export default function PortalLayout({
       </main>
       <FloatingCartButton />
       <MobileNav />
+      <ChatWidget />
     </div>
   )
 }
