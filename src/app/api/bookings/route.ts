@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { z } from "zod"
+import { generateAccessCodes } from "@/lib/access-codes/generate"
 
 const createBookingSchema = z.object({
   rateId: z.string().uuid(),
@@ -165,19 +167,11 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", booking.id)
 
-      // Generate access codes for trainer bookings
-      if (process.env.SEAM_API_KEY && process.env.SEAM_IGLOOHOME_DEVICE_ID) {
-        try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://863athletics.com"
-          await fetch(`${baseUrl}/api/access-codes/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bookingId: booking.id }),
-          })
-        } catch {
-          // Best-effort — admin can generate manually
-        }
-      }
+      // Schedule access-code generation to run after the response is sent.
+      // Avoids the previous round-trip to /api/access-codes/generate which
+      // failed authentication (no cookies on the internal fetch) and could
+      // push the request past Vercel's function timeout on mobile.
+      after(() => generateAccessCodes(booking.id))
     }
   }
 
