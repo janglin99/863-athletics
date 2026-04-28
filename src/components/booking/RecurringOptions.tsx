@@ -173,11 +173,22 @@ export function RecurringOptions({
 
             {/* Time slots — start/end selection */}
             <div className="space-y-2">
-              <Label>
-                {config.timeSlots.length === 0
-                  ? "Select start time"
-                  : "Click another time to adjust end time"}
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label>
+                  {config.timeSlots.length === 0
+                    ? "Select start time"
+                    : "Click later for end · click START to reset"}
+                </Label>
+                {config.timeSlots.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => update({ timeSlots: [] })}
+                    className="text-xs text-text-secondary hover:text-brand-orange underline underline-offset-2"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {Array.from({ length: 32 }, (_, i) => ({
                   hour: Math.floor(i / 2) + 6,
@@ -217,34 +228,44 @@ export function RecurringOptions({
                           } else {
                             update({ timeSlots: [slot] })
                           }
-                        } else {
-                          const firstMin = config.timeSlots[0].hour * 60 + config.timeSlots[0].minute
-
-                          if (slotMin <= firstMin) {
-                            // Clicked at or before start — new start with 1-hour auto
-                            const nextSlot = {
-                              hour: slot.minute === 30 ? slot.hour + 1 : slot.hour,
-                              minute: slot.minute === 30 ? 0 : 30,
-                            }
-                            if (nextSlot.hour * 60 + nextSlot.minute <= 22 * 60) {
-                              update({ timeSlots: [slot, nextSlot] })
-                            } else {
-                              update({ timeSlots: [slot] })
-                            }
-                          } else {
-                            // Extend/shrink to this as end time
-                            const newSlots: { hour: number; minute: number }[] = []
-                            let curMin = firstMin
-                            while (curMin <= slotMin) {
-                              newSlots.push({
-                                hour: Math.floor(curMin / 60),
-                                minute: curMin % 60,
-                              })
-                              curMin += 30
-                            }
-                            update({ timeSlots: newSlots })
-                          }
+                          return
                         }
+
+                        const firstMin =
+                          config.timeSlots[0].hour * 60 +
+                          config.timeSlots[0].minute
+
+                        if (slotMin === firstMin) {
+                          // Clicked the current START — clear so user can pick anew
+                          update({ timeSlots: [] })
+                          return
+                        }
+
+                        if (slotMin < firstMin) {
+                          // Clicked before start — new start with 1-hour auto
+                          const nextSlot = {
+                            hour: slot.minute === 30 ? slot.hour + 1 : slot.hour,
+                            minute: slot.minute === 30 ? 0 : 30,
+                          }
+                          if (nextSlot.hour * 60 + nextSlot.minute <= 22 * 60) {
+                            update({ timeSlots: [slot, nextSlot] })
+                          } else {
+                            update({ timeSlots: [slot] })
+                          }
+                          return
+                        }
+
+                        // Clicked after start — extend/shrink to this as end
+                        const newSlots: { hour: number; minute: number }[] = []
+                        let curMin = firstMin
+                        while (curMin <= slotMin) {
+                          newSlots.push({
+                            hour: Math.floor(curMin / 60),
+                            minute: curMin % 60,
+                          })
+                          curMin += 30
+                        }
+                        update({ timeSlots: newSlots })
                       }}
                       className={cn(
                         "px-2 py-2 rounded-md text-xs font-medium transition-all relative",
