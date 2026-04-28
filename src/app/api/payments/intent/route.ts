@@ -12,28 +12,48 @@ export async function POST(req: NextRequest) {
     if (!user)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { bookingId } = await req.json()
+    const body = await req.json()
+    // Accept either { bookingId } (single) or { bookingIds: [] } (multi).
+    const bookingIds: string[] = Array.isArray(body.bookingIds)
+      ? body.bookingIds
+      : body.bookingId
+        ? [body.bookingId]
+        : []
 
-    const { data: booking } = await supabase
+    if (bookingIds.length === 0) {
+      return NextResponse.json(
+        { error: "bookingId or bookingIds required" },
+        { status: 400 }
+      )
+    }
+
+    const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
       .select("*, customer:profiles!customer_id(*)")
-      .eq("id", bookingId)
+      .in("id", bookingIds)
       .eq("customer_id", user.id)
-      .single()
 
-    if (!booking)
-      return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+    if (bookingsError || !bookings || bookings.length !== bookingIds.length) {
+      return NextResponse.json(
+        { error: "One or more bookings not found" },
+        { status: 404 }
+      )
+    }
+
+    const customer = bookings[0].customer
+    const totalCents = bookings.reduce(
+      (sum, b) => sum + (b.total_cents ?? 0),
+      0
+    )
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
-    // Get or create Stripe customer
-    let stripeCustomerId = booking.customer.stripe_customer_id
-
+    let stripeCustomerId = customer.stripe_customer_id
     if (!stripeCustomerId) {
       const stripeCustomer = await stripe.customers.create({
-        email: booking.customer.email,
-        name: `${booking.customer.first_name} ${booking.customer.last_name}`,
-        phone: booking.customer.phone || undefined,
+        email: customer.email,
+        name: `${customer.first_name} ${customer.last_name}`,
+        phone: customer.phone || undefined,
         metadata: { supabase_id: user.id },
       })
       stripeCustomerId = stripeCustomer.id
@@ -44,36 +64,42 @@ export async function POST(req: NextRequest) {
         .eq("id", user.id)
     }
 
+    const bookingNumbers = bookings.map((b) => b.booking_number).join(",")
+    const description =
+      bookings.length === 1
+        ? `863 Athletics — Booking ${bookings[0].booking_number}`
+        : `863 Athletics — ${bookings.length} bookings (${bookingNumbers})`
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: booking.total_cents,
+      amount: totalCents,
       currency: "usd",
       customer: stripeCustomerId,
       automatic_payment_methods: { enabled: true },
       metadata: {
-        booking_id: bookingId,
-        booking_number: booking.booking_number,
+        booking_ids: bookings.map((b) => b.id).join(","),
+        booking_numbers: bookingNumbers,
         customer_id: user.id,
       },
-      description: `863 Athletics — Booking ${booking.booking_number}`,
-      receipt_email: booking.customer.email,
+      description,
+      receipt_email: customer.email,
     })
 
-    // Create payment record
-    await supabase.from("payments").insert({
-      booking_id: bookingId,
+    // One payment row per booking, all linked to the same Stripe PI.
+    const paymentRows = bookings.map((b) => ({
+      booking_id: b.id,
       customer_id: user.id,
-      amount_cents: booking.total_cents,
+      amount_cents: b.total_cents,
       method: "stripe_card",
       status: "pending",
       stripe_payment_intent_id: paymentIntent.id,
-    })
+    }))
+    await supabase.from("payments").insert(paymentRows)
 
     return NextResponse.json({ clientSecret: paymentIntent.client_secret })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Payment intent error:", error)
-    return NextResponse.json(
-      { error: error.message || "Failed to create payment" },
-      { status: 500 }
-    )
+    const message =
+      error instanceof Error ? error.message : "Failed to create payment"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -8,14 +8,14 @@ import { toast } from "sonner"
 
 interface StripePaymentFormProps {
   onSuccess: () => void
-  bookingNumber: string
-  bookingId: string
+  bookingNumbers: string[]
+  bookingIds: string[]
 }
 
 export function StripePaymentForm({
   onSuccess,
-  bookingNumber,
-  bookingId,
+  bookingNumbers,
+  bookingIds,
 }: StripePaymentFormProps) {
   const stripe = useStripe()
   const elements = useElements()
@@ -30,7 +30,7 @@ export function StripePaymentForm({
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/book/confirmation?booking=${bookingNumber}`,
+        return_url: `${window.location.origin}/book/confirmation?booking=${bookingNumbers.join(",")}`,
       },
       redirect: "if_required",
     })
@@ -41,13 +41,14 @@ export function StripePaymentForm({
       return
     }
 
-    // Payment succeeded — confirm the booking server-side
-    try {
-      await fetch(`/api/bookings/${bookingId}/confirm`, {
-        method: "POST",
-      })
-    } catch {
-      // Webhook will handle it as fallback
+    // Payment succeeded — confirm each booking server-side as a fallback to
+    // the Stripe webhook. /api/bookings/[id]/confirm is idempotent.
+    for (const id of bookingIds) {
+      try {
+        await fetch(`/api/bookings/${id}/confirm`, { method: "POST" })
+      } catch {
+        // Webhook will handle it
+      }
     }
 
     toast.success("Payment successful!")

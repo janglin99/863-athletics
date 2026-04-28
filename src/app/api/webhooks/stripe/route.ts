@@ -30,7 +30,13 @@ export async function POST(req: NextRequest) {
 
   if (event.type === "payment_intent.succeeded") {
     const pi = event.data.object as Stripe.PaymentIntent
-    const bookingId = pi.metadata.booking_id
+    // Support multi-booking PIs (booking_ids = comma-separated) and legacy
+    // single-booking PIs (booking_id) for in-flight payments at deploy time.
+    const bookingIds: string[] = pi.metadata.booking_ids
+      ? pi.metadata.booking_ids.split(",").filter(Boolean)
+      : pi.metadata.booking_id
+        ? [pi.metadata.booking_id]
+        : []
 
     await supabaseAdmin
       .from("payments")
@@ -40,17 +46,21 @@ export async function POST(req: NextRequest) {
       })
       .eq("stripe_payment_intent_id", pi.id)
 
-    await supabaseAdmin
-      .from("bookings")
-      .update({
-        status: "confirmed",
-        payment_status: "paid",
-        confirmed_at: new Date().toISOString(),
-      })
-      .eq("id", bookingId)
+    if (bookingIds.length > 0) {
+      await supabaseAdmin
+        .from("bookings")
+        .update({
+          status: "confirmed",
+          payment_status: "paid",
+          confirmed_at: new Date().toISOString(),
+        })
+        .in("id", bookingIds)
 
-    // Generate access codes via Seam
-    await generateAccessCodes(bookingId)
+      // Generate access codes for each confirmed booking
+      for (const id of bookingIds) {
+        await generateAccessCodes(id)
+      }
+    }
   }
 
   if (event.type === "payment_intent.payment_failed") {

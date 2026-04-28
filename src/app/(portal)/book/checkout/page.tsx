@@ -38,8 +38,9 @@ export default function CheckoutPage() {
   const [waiverConfirmed, setWaiverConfirmed] = useState(false)
   const [notes, setNotes] = useState("")
   const [clientSecret, setClientSecret] = useState<string | null>(null)
-  const [bookingId, setBookingId] = useState<string | null>(null)
-  const [bookingNumber, setBookingNumber] = useState<string>("")
+  const [createdBookings, setCreatedBookings] = useState<
+    { id: string; booking_number: string }[]
+  >([])
   const [loading, setLoading] = useState(false)
   const [isInHouseTrainer, setIsInHouseTrainer] = useState(false)
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null)
@@ -136,37 +137,7 @@ export default function CheckoutPage() {
     return `${Number(credit.remaining_amount)} sessions available — covers 1 booking`
   }
 
-  const handleApplyCredit = async (bId: string) => {
-    if (!selectedCreditId) {
-      toast.error("Please select a credit to apply")
-      return
-    }
-    setApplyingCredit(true)
-    const res = await fetch("/api/credits/apply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bookingId: bId, creditId: selectedCreditId }),
-    })
-    const data = await res.json()
-    if (res.ok) {
-      setCreditApplied(true)
-      setCreditDiscountCents(data.discountCents || 0)
-      setCreditFullyCovered(data.fullyCovered || false)
-      if (data.fullyCovered) {
-        await releaseHolds()
-        toast.success("Booking confirmed with credits!")
-        clearCart()
-        router.push(`/book/confirmation?booking=${bookingNumber}`)
-      } else {
-        toast.success(`Credit applied: -${formatCents(data.discountCents)}`)
-      }
-    } else {
-      toast.error(data.error || "Failed to apply credit")
-    }
-    setApplyingCredit(false)
-  }
-
-  const createBooking = async (method: string) => {
+  const createBookings = async (method: string) => {
     if (!waiverConfirmed) {
       toast.error("Please confirm the liability waiver")
       return null
@@ -178,43 +149,61 @@ export default function CheckoutPage() {
 
     setLoading(true)
 
-    // Create booking for first cart item (simplified — in production, support multiple)
-    const item = items[0]
-    const res = await fetch("/api/bookings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        rateId: item.rateId,
-        slots: item.slots,
-        participantCount: item.participantCount,
-        notes,
-        paymentMethod: method === "stripe" ? "stripe_card" : method,
-        waiverConfirmed: true,
-        isRecurring: item.isRecurring,
-        recurringPattern: item.isRecurring && item.recurringConfig
-          ? item.recurringConfig
-          : undefined,
-      }),
-    })
+    // One POST per cart item. Stop on first failure — already-created
+    // bookings stay as pending_payment and clean up via slot-hold expiration
+    // if not paid.
+    const created: { id: string; booking_number: string; total_cents: number }[] = []
+    for (const item of items) {
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rateId: item.rateId,
+          slots: item.slots,
+          participantCount: item.participantCount,
+          notes,
+          paymentMethod: method === "stripe" ? "stripe_card" : method,
+          waiverConfirmed: true,
+          isRecurring: item.isRecurring,
+          recurringPattern: item.isRecurring && item.recurringConfig
+            ? item.recurringConfig
+            : undefined,
+        }),
+      })
 
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error || "Failed to create booking")
-      setLoading(false)
-      return null
+      const data = await res.json()
+      if (!res.ok) {
+        const partial =
+          created.length > 0
+            ? ` (${created.length} of ${items.length} bookings were already created — please contact support)`
+            : ""
+        toast.error((data.error || "Failed to create booking") + partial)
+        setLoading(false)
+        return null
+      }
+      created.push(data.booking)
     }
 
-    setBookingId(data.booking.id)
-    setBookingNumber(data.booking.booking_number)
-    return data.booking
+    setCreatedBookings(
+      created.map((b) => ({ id: b.id, booking_number: b.booking_number }))
+    )
+    return created
   }
 
-  const handleStripeCheckout = async () => {
-    const booking = await createBooking(selectedCreditId ? "credit" : "stripe")
-    if (!booking) return
+  const bookingNumberQuery = (
+    bookings: { booking_number: string }[]
+  ): string => bookings.map((b) => b.booking_number).join(",")
 
-    // If a credit is selected, apply it first
-    if (selectedCreditId) {
+  const handleStripeCheckout = async () => {
+    // Credits are single-cart only (multi-item credit allocation is its own
+    // design problem). The UI hides the credit selector when items > 1, so
+    // this branch is only reachable with one cart item.
+    const useCredit = selectedCreditId && items.length === 1
+    const created = await createBookings(useCredit ? "credit" : "stripe")
+    if (!created) return
+
+    if (useCredit) {
+      const booking = created[0]
       setApplyingCredit(true)
       const creditRes = await fetch("/api/credits/apply", {
         method: "POST",
@@ -245,11 +234,11 @@ export default function CheckoutPage() {
       toast.success(`Credit applied: -${formatCents(creditData.discountCents)}`)
     }
 
-    // Create payment intent (for remaining amount after credits)
+    // Create payment intent (sum of all bookings, minus any credit applied)
     const res = await fetch("/api/payments/intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bookingId: booking.id }),
+      body: JSON.stringify({ bookingIds: created.map((b) => b.id) }),
     })
 
     const data = await res.json()
@@ -264,13 +253,17 @@ export default function CheckoutPage() {
   }
 
   const handleTrainerBooking = async () => {
-    const booking = await createBooking("trainer_account")
-    if (!booking) return
+    const created = await createBookings("trainer_account")
+    if (!created) return
 
     await releaseHolds()
-    toast.success("Booking confirmed! Added to your monthly billing.")
+    toast.success(
+      created.length === 1
+        ? "Booking confirmed! Added to your monthly billing."
+        : `${created.length} bookings confirmed! Added to your monthly billing.`
+    )
     clearCart()
-    router.push(`/book/confirmation?booking=${booking.booking_number}`)
+    router.push(`/book/confirmation?booking=${bookingNumberQuery(created)}`)
   }
 
 
@@ -398,8 +391,11 @@ export default function CheckoutPage() {
         </Label>
       </div>
 
-      {/* Apply Credits */}
-      {availableCredits.length > 0 && !creditApplied && !isInHouseTrainer && (
+      {/* Apply Credits — only available for single-item carts */}
+      {availableCredits.length > 0 &&
+        !creditApplied &&
+        !isInHouseTrainer &&
+        items.length === 1 && (
         <div className="bg-bg-secondary rounded-lg border border-border p-6 mb-6">
           <h3 className="font-display font-bold uppercase tracking-wide mb-4">
             Apply Credits
@@ -513,11 +509,11 @@ export default function CheckoutPage() {
                   releaseHolds()
                   clearCart()
                   router.push(
-                    `/book/confirmation?booking=${bookingNumber}`
+                    `/book/confirmation?booking=${bookingNumberQuery(createdBookings)}`
                   )
                 }}
-                bookingNumber={bookingNumber}
-                bookingId={bookingId || ""}
+                bookingNumbers={createdBookings.map((b) => b.booking_number)}
+                bookingIds={createdBookings.map((b) => b.id)}
               />
             </Elements>
           ) : !creditFullyCovered ? (

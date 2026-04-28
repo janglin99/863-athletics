@@ -11,23 +11,29 @@ import type { Booking } from "@/types"
 
 function ConfirmationContent() {
   const searchParams = useSearchParams()
-  const bookingNumber = searchParams.get("booking") || "------"
+  const rawBookingParam = searchParams.get("booking") || ""
+  const bookingNumbers = rawBookingParam
+    ? rawBookingParam.split(",").filter(Boolean)
+    : []
+  const primaryBookingNumber = bookingNumbers[0] || "------"
+  const isMulti = bookingNumbers.length > 1
   const [booking, setBooking] = useState<Booking | null>(null)
   const [loadingCode, setLoadingCode] = useState(true)
 
   useEffect(() => {
     async function fetchBooking() {
       const supabase = createClient()
+      // For multi-item carts we only fetch the first booking's access code on
+      // this screen — the rest are visible on each booking's detail page.
       const { data } = await supabase
         .from("bookings")
         .select("*, access_codes(*), slots:booking_slots(*)")
-        .eq("booking_number", bookingNumber)
+        .eq("booking_number", primaryBookingNumber)
         .single()
 
       setBooking(data)
       setLoadingCode(false)
 
-      // If no access codes yet, poll for them
       if (data && (!data.access_codes || data.access_codes.length === 0)) {
         let attempts = 0
         const interval = setInterval(async () => {
@@ -35,7 +41,7 @@ function ConfirmationContent() {
           const { data: updated } = await supabase
             .from("bookings")
             .select("*, access_codes(*), slots:booking_slots(*)")
-            .eq("booking_number", bookingNumber)
+            .eq("booking_number", primaryBookingNumber)
             .single()
 
           if (updated?.access_codes && updated.access_codes.length > 0) {
@@ -48,8 +54,8 @@ function ConfirmationContent() {
         return () => clearInterval(interval)
       }
     }
-    if (bookingNumber !== "------") fetchBooking()
-  }, [bookingNumber])
+    if (primaryBookingNumber !== "------") fetchBooking()
+  }, [primaryBookingNumber])
 
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code)
@@ -79,10 +85,25 @@ function ConfirmationContent() {
         </p>
 
         <div className="bg-bg-secondary rounded-lg border border-border p-6 mb-6">
-          <p className="text-sm text-text-muted mb-1">Booking Number</p>
-          <p className="text-4xl font-mono font-bold text-brand-orange tracking-widest">
-            {bookingNumber}
+          <p className="text-sm text-text-muted mb-1">
+            {isMulti ? `Booking Numbers (${bookingNumbers.length})` : "Booking Number"}
           </p>
+          {isMulti ? (
+            <div className="flex flex-wrap justify-center gap-2 mt-1">
+              {bookingNumbers.map((n) => (
+                <span
+                  key={n}
+                  className="text-lg font-mono font-bold text-brand-orange tracking-wider bg-bg-elevated rounded px-3 py-1"
+                >
+                  {n}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-4xl font-mono font-bold text-brand-orange tracking-widest">
+              {primaryBookingNumber}
+            </p>
+          )}
         </div>
 
         {/* Access Code */}
