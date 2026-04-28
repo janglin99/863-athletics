@@ -70,8 +70,15 @@ export function TimeSlotGrid({
         (s) => s.start === selectedSlots[0].start
       )
 
-      if (index <= currentStartIdx) {
-        // Clicked before or on start — treat as new start, auto-select 1 hour
+      if (index === currentStartIdx) {
+        // Clicked the current START — clear so user can pick a new time
+        setMode("idle")
+        onSlotsChanged([])
+        return
+      }
+
+      if (index < currentStartIdx) {
+        // Clicked before start — new start with auto 1-hour selection
         const endIdx = index + 1
         if (endIdx < slots.length && slots[endIdx].available) {
           const selected = slots.slice(index, endIdx + 1).map((s) => ({
@@ -131,7 +138,7 @@ export function TimeSlotGrid({
         <p className="text-sm text-text-secondary">
           {mode === "idle"
             ? "Select your start time"
-            : "Click another time to adjust end time"}
+            : "Click later for end · click START to reset"}
           <span className="text-text-muted ml-2">
             ({availableSlots.length} slots available)
           </span>
