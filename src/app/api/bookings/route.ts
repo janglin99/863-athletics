@@ -15,7 +15,7 @@ const createBookingSchema = z.object({
       })
     )
     .min(1)
-    .max(10),
+    .max(200),
   participantCount: z.number().min(1).max(30).default(1),
   notes: z.string().max(500).optional(),
   paymentMethod: z.enum([

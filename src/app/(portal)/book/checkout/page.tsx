@@ -190,7 +190,10 @@ export default function CheckoutPage() {
         notes,
         paymentMethod: method === "stripe" ? "stripe_card" : method,
         waiverConfirmed: true,
-        isRecurring: false,
+        isRecurring: item.isRecurring,
+        recurringPattern: item.isRecurring && item.recurringConfig
+          ? item.recurringConfig
+          : undefined,
       }),
     })
 
