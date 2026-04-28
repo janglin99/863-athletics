@@ -53,7 +53,7 @@ export function CartDrawer() {
         </SheetHeader>
 
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
             <ShoppingCart className="h-12 w-12 text-text-muted mb-4" />
             <p className="text-text-secondary">Your cart is empty</p>
             <p className="text-sm text-text-muted mt-1">
@@ -61,8 +61,8 @@ export function CartDrawer() {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col h-full">
-            <div className="flex-1 overflow-y-auto space-y-3 py-4">
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 px-4">
               {items.map((item) => (
                 <div
                   key={item.id}
@@ -135,7 +135,7 @@ export function CartDrawer() {
               ))}
             </div>
 
-            <div className="border-t border-border pt-4 pb-6 space-y-4">
+            <div className="border-t border-border p-4 pb-6 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-text-secondary">Total</span>
                 <span className="text-2xl font-display font-bold text-brand-orange">
@@ -149,7 +149,7 @@ export function CartDrawer() {
                 Proceed to Checkout
               </Button>
             </div>
-          </div>
+          </>
         )}
       </SheetContent>
     </Sheet>
