@@ -9,10 +9,10 @@ import {
   ClipboardList,
   CreditCard,
   User,
+  UserCircle,
   Shield,
   FileText,
   LogOut,
-  Menu,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -28,7 +28,6 @@ const portalLinks = [
   { href: "/book", label: "Book", icon: CalendarPlus },
   { href: "/bookings", label: "Bookings", icon: ClipboardList },
   { href: "/payments", label: "Pay", icon: CreditCard },
-  { href: "/profile", label: "Profile", icon: User },
 ]
 
 export function MobileNav() {
@@ -102,11 +101,14 @@ export function MobileNav() {
           })}
           <button
             onClick={() => setMenuOpen(true)}
-            className="flex flex-col items-center gap-1 px-2 py-1 text-xs text-text-secondary"
-            aria-label="Open menu"
+            className={cn(
+              "flex flex-col items-center gap-1 px-2 py-1 text-xs",
+              menuOpen ? "text-brand-orange" : "text-text-secondary"
+            )}
+            aria-label="Open account menu"
           >
-            <Menu className="h-5 w-5" />
-            Menu
+            <UserCircle className="h-5 w-5" />
+            Account
           </button>
         </div>
       </nav>
@@ -118,7 +120,7 @@ export function MobileNav() {
         >
           <SheetHeader>
             <SheetTitle className="font-display uppercase tracking-wide text-text-primary">
-              Menu
+              Account
             </SheetTitle>
             {(userName || userEmail) && (
               <div className="pt-1">
@@ -135,6 +137,14 @@ export function MobileNav() {
           </SheetHeader>
 
           <div className="flex-1 flex flex-col gap-1 px-4">
+            <Link
+              href="/profile"
+              onClick={closeMenu}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+            >
+              <User className="h-5 w-5" />
+              Profile
+            </Link>
             {isAdmin && (
               <Link
                 href="/admin"
