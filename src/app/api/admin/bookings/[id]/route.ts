@@ -160,13 +160,14 @@ export async function DELETE(
 
   // Cascade cleanup. RLS on these tables doesn't grant DELETE to admins, so we
   // use the service-role client. Order matters only for FK integrity.
+  // (cart_items intentionally excluded — it's a pre-booking shopping cart
+  // keyed by rate/customer, with no booking_id reference.)
   const cascadeTables = [
     "payments",
     "access_codes",
     "notification_log",
     "reviews",
     "credit_transactions",
-    "cart_items",
   ] as const
 
   for (const table of cascadeTables) {
