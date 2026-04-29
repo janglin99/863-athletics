@@ -17,10 +17,30 @@ import {
 } from "@/components/booking/BookingStatusBadge"
 import { AdminCreateBookingDialog } from "@/components/admin/AdminCreateBookingDialog"
 import { AdminBookingCalendar } from "@/components/admin/AdminBookingCalendar"
-import { formatCents, formatDateTime } from "@/lib/utils/format"
+import { formatCents, formatDate, formatDateTime } from "@/lib/utils/format"
 import { toast } from "sonner"
 import { Search, List, Calendar as CalendarIcon, Trash2, Loader2 } from "lucide-react"
 import type { Booking } from "@/types"
+
+type GroupBy = "none" | "customer" | "date"
+
+interface BookingGroup {
+  key: string
+  label: string
+  bookings: Booking[]
+  totalCents: number
+}
+
+// Earliest non-cancelled slot start_time, falling back to created_at so
+// bookings without scheduled slots still group under something sensible.
+function bookingAnchorTime(b: Booking): string {
+  const active = (b.slots ?? []).filter((s) => s.status !== "cancelled")
+  if (active.length === 0) return b.created_at
+  return active.reduce(
+    (min, s) => (s.start_time < min ? s.start_time : min),
+    active[0].start_time
+  )
+}
 
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -32,6 +52,7 @@ export default function AdminBookingsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [groupBy, setGroupBy] = useState<GroupBy>("none")
 
   const loadBookings = useCallback(async () => {
     const supabase = createClient()
@@ -91,6 +112,51 @@ export default function AdminBookingsPage() {
     [bookings, filter, search]
   )
 
+  const groups = useMemo<BookingGroup[]>(() => {
+    if (groupBy === "none") return []
+
+    const map = new Map<string, BookingGroup>()
+    for (const b of filtered) {
+      let key: string
+      let label: string
+      if (groupBy === "customer") {
+        key = b.customer_id
+        const name = `${b.customer?.first_name ?? ""} ${
+          b.customer?.last_name ?? ""
+        }`.trim()
+        label = name || b.customer?.email || "Unknown customer"
+      } else {
+        // date — use ET date of the earliest active slot (or created_at as fallback)
+        const anchor = new Date(bookingAnchorTime(b))
+        key = anchor.toLocaleDateString("en-CA", {
+          timeZone: "America/New_York",
+        })
+        label = formatDate(anchor.toISOString())
+      }
+      const existing = map.get(key)
+      if (existing) {
+        existing.bookings.push(b)
+        existing.totalCents += b.total_cents
+      } else {
+        map.set(key, {
+          key,
+          label,
+          bookings: [b],
+          totalCents: b.total_cents,
+        })
+      }
+    }
+
+    const arr = Array.from(map.values())
+    if (groupBy === "customer") {
+      arr.sort((a, b) => a.label.localeCompare(b.label))
+    } else {
+      // Most recent date first
+      arr.sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0))
+    }
+    return arr
+  }, [filtered, groupBy])
+
   const toggleOne = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -112,6 +178,73 @@ export default function AdminBookingsPage() {
 
   const allVisibleSelected =
     filtered.length > 0 && filtered.every((b) => selectedIds.has(b.id))
+
+  const renderBookingRow = (booking: Booking) => {
+    const firstSlot = booking.slots?.[0]
+    const isSelected = selectedIds.has(booking.id)
+    const row = (
+      <Card
+        className={`bg-bg-secondary border-border transition-colors ${
+          isSelected
+            ? "border-brand-orange/60"
+            : "hover:border-brand-orange/50"
+        } ${isSuperAdmin ? "" : "cursor-pointer"}`}
+      >
+        <CardContent className="py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <span className="font-mono text-xs text-text-muted w-20 shrink-0">
+                {booking.booking_number}
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm truncate">
+                  {booking.customer?.first_name}{" "}
+                  {booking.customer?.last_name}
+                </p>
+                <p className="text-xs text-text-secondary truncate">
+                  {booking.rate?.name}
+                  {firstSlot &&
+                    ` · ${formatDateTime(firstSlot.start_time)}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <BookingStatusBadge status={booking.status} />
+              <PaymentStatusBadge status={booking.payment_status} />
+              <span className="font-display font-bold text-sm">
+                {formatCents(booking.total_cents)}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+
+    if (!isSuperAdmin) {
+      return (
+        <Link key={booking.id} href={`/admin/bookings/${booking.id}`}>
+          {row}
+        </Link>
+      )
+    }
+
+    return (
+      <div key={booking.id} className="flex items-center gap-2">
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={(c) => toggleOne(booking.id, c === true)}
+          aria-label={`Select booking ${booking.booking_number}`}
+          className="shrink-0"
+        />
+        <Link
+          href={`/admin/bookings/${booking.id}`}
+          className="flex-1 min-w-0"
+        >
+          {row}
+        </Link>
+      </div>
+    )
+  }
 
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds)
@@ -208,6 +341,22 @@ export default function AdminBookingsPage() {
             </Tabs>
           </div>
 
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-xs uppercase tracking-wide text-text-muted">
+              Group by
+            </span>
+            <Tabs
+              value={groupBy}
+              onValueChange={(v) => v && setGroupBy(v as GroupBy)}
+            >
+              <TabsList className="bg-bg-secondary">
+                <TabsTrigger value="none">None</TabsTrigger>
+                <TabsTrigger value="customer">Customer</TabsTrigger>
+                <TabsTrigger value="date">Date</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
           {isSuperAdmin && filtered.length > 0 && (
             <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-md bg-bg-secondary border border-border">
               <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none">
@@ -249,79 +398,39 @@ export default function AdminBookingsPage() {
                 <Skeleton key={i} className="h-16 bg-bg-elevated rounded-lg" />
               ))}
             </div>
-          ) : (
+          ) : groupBy === "none" ? (
             <div className="space-y-2">
-              {filtered.map((booking) => {
-                const firstSlot = booking.slots?.[0]
-                const isSelected = selectedIds.has(booking.id)
-                const row = (
-                  <Card
-                    className={`bg-bg-secondary border-border transition-colors ${
-                      isSelected
-                        ? "border-brand-orange/60"
-                        : "hover:border-brand-orange/50"
-                    } ${isSuperAdmin ? "" : "cursor-pointer"}`}
-                  >
-                    <CardContent className="py-3">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <span className="font-mono text-xs text-text-muted w-20 shrink-0">
-                            {booking.booking_number}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">
-                              {booking.customer?.first_name}{" "}
-                              {booking.customer?.last_name}
-                            </p>
-                            <p className="text-xs text-text-secondary truncate">
-                              {booking.rate?.name}
-                              {firstSlot &&
-                                ` · ${formatDateTime(firstSlot.start_time)}`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <BookingStatusBadge status={booking.status} />
-                          <PaymentStatusBadge status={booking.payment_status} />
-                          <span className="font-display font-bold text-sm">
-                            {formatCents(booking.total_cents)}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-
-                if (!isSuperAdmin) {
-                  return (
-                    <Link
-                      key={booking.id}
-                      href={`/admin/bookings/${booking.id}`}
-                    >
-                      {row}
-                    </Link>
-                  )
-                }
-
-                return (
-                  <div key={booking.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(c) => toggleOne(booking.id, c === true)}
-                      aria-label={`Select booking ${booking.booking_number}`}
-                      className="shrink-0"
-                    />
-                    <Link
-                      href={`/admin/bookings/${booking.id}`}
-                      className="flex-1 min-w-0"
-                    >
-                      {row}
-                    </Link>
-                  </div>
-                )
-              })}
-
+              {filtered.map(renderBookingRow)}
               {filtered.length === 0 && (
+                <p className="text-text-secondary text-center py-8">
+                  No bookings found
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {groups.map((group) => (
+                <section key={group.key}>
+                  <header className="flex items-center justify-between gap-3 mb-2 px-1">
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      <h3 className="font-display font-bold uppercase tracking-wide text-sm truncate">
+                        {group.label}
+                      </h3>
+                      <span className="text-xs text-text-muted shrink-0">
+                        {group.bookings.length}{" "}
+                        {group.bookings.length === 1 ? "booking" : "bookings"}
+                      </span>
+                    </div>
+                    <span className="font-display font-bold text-sm text-brand-orange shrink-0">
+                      {formatCents(group.totalCents)}
+                    </span>
+                  </header>
+                  <div className="space-y-2">
+                    {group.bookings.map(renderBookingRow)}
+                  </div>
+                </section>
+              ))}
+              {groups.length === 0 && (
                 <p className="text-text-secondary text-center py-8">
                   No bookings found
                 </p>

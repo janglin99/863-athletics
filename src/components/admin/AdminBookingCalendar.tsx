@@ -269,67 +269,71 @@ export function AdminBookingCalendar() {
   }, [])
 
   return (
-    <div className="border border-border rounded-lg bg-bg-secondary overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(-7)}
-            className="border-border"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToToday}
-            className="border-border"
-          >
-            Today
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(7)}
-            className="border-border"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <span className="ml-3 font-display font-bold tracking-wide text-text-primary">
-            {weekLabel}
-          </span>
-        </div>
-        {loading && (
-          <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
-        )}
-      </div>
-
-      {/* Day headers */}
-      <div
-        className="grid border-b border-border bg-bg-elevated text-xs"
-        style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}
-      >
-        <div />
-        {dayKeys.map((d) => {
-          const isToday =
-            format(d.date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
-          return (
-            <div
-              key={d.key}
-              className={cn(
-                "p-2 text-center border-l border-border",
-                isToday ? "text-brand-orange" : "text-text-secondary"
-              )}
+    <div className="border border-border rounded-lg bg-bg-secondary">
+      {/* Sticky header — toolbar + day labels stay visible while the user
+          scrolls the page down past the morning slots. */}
+      <div className="sticky top-0 z-20 bg-bg-secondary rounded-t-lg">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between gap-2 p-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(-7)}
+              className="border-border"
             >
-              <div className="font-bold uppercase">{d.label}</div>
-              <div className={cn("text-xs", isToday && "text-brand-orange")}>
-                {d.dayLabel}
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={goToToday}
+              className="border-border"
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(7)}
+              className="border-border"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="ml-3 font-display font-bold tracking-wide text-text-primary">
+              {weekLabel}
+            </span>
+          </div>
+          {loading && (
+            <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
+          )}
+        </div>
+
+        {/* Day headers */}
+        <div
+          className="grid border-b border-border bg-bg-elevated text-xs"
+          style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}
+        >
+          <div />
+          {dayKeys.map((d) => {
+            const isToday =
+              format(d.date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
+            return (
+              <div
+                key={d.key}
+                className={cn(
+                  "p-2 text-center border-l border-border",
+                  isToday ? "text-brand-orange" : "text-text-secondary"
+                )}
+              >
+                <div className="font-bold uppercase">{d.label}</div>
+                <div className={cn("text-xs", isToday && "text-brand-orange")}>
+                  {d.dayLabel}
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
       {/* Grid body */}
