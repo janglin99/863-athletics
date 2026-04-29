@@ -30,19 +30,20 @@ import { formatCents } from "@/lib/utils/format"
 import { Tag, Plus, Pencil, Trash2, Percent, DollarSign, Clock } from "lucide-react"
 import { toast } from "sonner"
 
-const RATE_TYPES = [
-  { value: "drop_in_1hr", label: "Drop-in (1hr)" },
-  { value: "drop_in_multi", label: "Drop-in (Multi)" },
-  { value: "day_pass", label: "Day Pass" },
-  { value: "trainer_private", label: "Trainer (Private)" },
-  { value: "trainer_group_small", label: "Trainer (Small Group)" },
-  { value: "trainer_group_large", label: "Trainer (Large Group)" },
-  { value: "membership_monthly", label: "Membership (Monthly)" },
-  { value: "pack_5", label: "5-Pack" },
-  { value: "pack_10", label: "10-Pack" },
-  { value: "staff_access", label: "Staff Access" },
-  { value: "event", label: "Event" },
-]
+interface RateTypeOption {
+  value: string
+  label: string
+}
+
+// Convert a snake_case rate type into a human-friendly fallback label, used
+// only when no rate row provides a name for that type (e.g., the type was
+// deleted but a saved promo still references it).
+function humanizeRateType(type: string): string {
+  return type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}
 
 const DISCOUNT_TYPES = [
   { value: "percentage", label: "Percentage" },
@@ -180,6 +181,7 @@ export default function AdminPromoCodesPage() {
   const [promos, setPromos] = useState<PromoCode[]>([])
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [rateTypes, setRateTypes] = useState<RateTypeOption[]>([])
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -193,6 +195,7 @@ export default function AdminPromoCodesPage() {
 
   useEffect(() => {
     loadPromos()
+    loadRateTypes()
   }, [])
 
   async function loadPromos() {
@@ -204,6 +207,24 @@ export default function AdminPromoCodesPage() {
 
     setPromos(data || [])
     setLoading(false)
+  }
+
+  async function loadRateTypes() {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from("rates")
+      .select("type, name, sort_order, is_active")
+      .order("sort_order", { ascending: true })
+
+    if (!data) return
+    // Dedupe by type, preferring the first active rate's name as the label.
+    const byType = new Map<string, RateTypeOption>()
+    for (const r of data) {
+      if (!r.type) continue
+      if (byType.has(r.type)) continue
+      byType.set(r.type, { value: r.type, label: r.name || humanizeRateType(r.type) })
+    }
+    setRateTypes(Array.from(byType.values()))
   }
 
   async function toggleActive(promo: PromoCode) {
@@ -702,22 +723,43 @@ export default function AdminPromoCodesPage() {
                 Leave all unchecked to apply to all rate types.
               </p>
               <div className="grid grid-cols-2 gap-2 mt-1">
-                {RATE_TYPES.map((rt) => (
-                  <label
-                    key={rt.value}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={form.applicable_rate_types.includes(rt.value)}
-                      onChange={() => toggleRateType(rt.value)}
-                      className="rounded border-border bg-bg-elevated text-brand-orange focus:ring-brand-orange"
-                    />
-                    <span className="text-sm text-text-primary">
-                      {rt.label}
-                    </span>
-                  </label>
-                ))}
+                {(() => {
+                  // Show every type the rates table currently has, plus any
+                  // values already saved on this promo that aren't in the
+                  // current rates table (so the admin can see and uncheck
+                  // them).
+                  const known = new Set(rateTypes.map((r) => r.value))
+                  const orphans: RateTypeOption[] = form.applicable_rate_types
+                    .filter((t) => !known.has(t))
+                    .map((t) => ({
+                      value: t,
+                      label: `${humanizeRateType(t)} (orphan)`,
+                    }))
+                  const all = [...rateTypes, ...orphans]
+                  if (all.length === 0) {
+                    return (
+                      <p className="col-span-2 text-xs text-text-muted">
+                        No active rates found.
+                      </p>
+                    )
+                  }
+                  return all.map((rt) => (
+                    <label
+                      key={rt.value}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.applicable_rate_types.includes(rt.value)}
+                        onChange={() => toggleRateType(rt.value)}
+                        className="rounded border-border bg-bg-elevated text-brand-orange focus:ring-brand-orange"
+                      />
+                      <span className="text-sm text-text-primary">
+                        {rt.label}
+                      </span>
+                    </label>
+                  ))
+                })()}
               </div>
             </div>
 
