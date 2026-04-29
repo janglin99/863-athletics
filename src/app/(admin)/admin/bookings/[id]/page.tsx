@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
+import { useState, useEffect, useCallback } from "react"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { PageHeader } from "@/components/shared/PageHeader"
 import {
@@ -11,6 +11,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
+import { AdminBookingEditDialog } from "@/components/admin/AdminBookingEditDialog"
+import { createClient } from "@/lib/supabase/client"
 import {
   formatCents,
   formatDate,
@@ -25,14 +28,27 @@ import {
   User,
   CheckCircle,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react"
 import type { Booking } from "@/types"
 
 export default function AdminBookingDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const [booking, setBooking] = useState<Booking | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const reload = useCallback(async () => {
+    const res = await fetch(`/api/bookings/${params.id}`)
+    const data = await res.json()
+    setBooking(data.booking)
+  }, [params.id])
 
   useEffect(() => {
     async function load() {
@@ -43,6 +59,42 @@ export default function AdminBookingDetailPage() {
     }
     load()
   }, [params.id])
+
+  useEffect(() => {
+    async function checkRole() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+      setIsSuperAdmin(profile?.role === "admin")
+    }
+    checkRole()
+  }, [])
+
+  const handleDelete = async () => {
+    if (!booking) return
+    setDeleting(true)
+    const res = await fetch(`/api/admin/bookings/${booking.id}`, {
+      method: "DELETE",
+    })
+    const data = await res.json()
+    setDeleting(false)
+    setDeleteOpen(false)
+
+    if (!res.ok) {
+      toast.error(data.error || "Failed to delete booking")
+      return
+    }
+
+    toast.success("Booking deleted")
+    router.push("/admin/bookings")
+  }
 
   const handleConfirmPayment = async () => {
     if (!booking) return
@@ -101,9 +153,31 @@ export default function AdminBookingDetailPage() {
       <PageHeader
         title={`Booking ${booking.booking_number}`}
         action={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <BookingStatusBadge status={booking.status} />
             <PaymentStatusBadge status={booking.payment_status} />
+            {isSuperAdmin && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditOpen(true)}
+                  className="border-border"
+                >
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeleteOpen(true)}
+                  className="border-error/40 text-error hover:bg-error/10"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              </>
+            )}
           </div>
         }
       />
@@ -234,6 +308,30 @@ export default function AdminBookingDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {isSuperAdmin && (
+        <>
+          <AdminBookingEditDialog
+            booking={booking}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            onSaved={reload}
+          />
+          <ConfirmDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            title="Delete Booking"
+            description={
+              deleting
+                ? "Deleting…"
+                : "Permanently delete this booking and all associated slots, payments, access codes, and notifications? This cannot be undone."
+            }
+            confirmLabel={deleting ? "Deleting…" : "Delete Booking"}
+            onConfirm={handleDelete}
+            variant="destructive"
+          />
+        </>
+      )}
     </div>
   )
 }

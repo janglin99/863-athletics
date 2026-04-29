@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatCents, formatTime, formatDate } from "@/lib/utils/format"
 import { toast } from "sonner"
@@ -25,6 +26,8 @@ import {
   Clock,
   Ticket,
   CheckCircle,
+  Tag,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -36,6 +39,7 @@ export default function CheckoutPage() {
   const router = useRouter()
 
   const [waiverConfirmed, setWaiverConfirmed] = useState(false)
+  const [waiverOnFile, setWaiverOnFile] = useState(false)
   const [notes, setNotes] = useState("")
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [createdBookings, setCreatedBookings] = useState<
@@ -53,6 +57,14 @@ export default function CheckoutPage() {
   const [creditFullyCovered, setCreditFullyCovered] = useState(false)
   const [applyingCredit, setApplyingCredit] = useState(false)
 
+  // Promo code
+  const [promoInput, setPromoInput] = useState("")
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string
+    discountCents: number
+  } | null>(null)
+  const [validatingPromo, setValidatingPromo] = useState(false)
+
   useEffect(() => {
     async function checkTrainerStatus() {
       const supabase = createClient()
@@ -60,11 +72,15 @@ export default function CheckoutPage() {
       if (!user) return
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role, trainer_type")
+        .select("role, trainer_type, waiver_signed")
         .eq("id", user.id)
         .single()
       if (profile?.role === "trainer" && profile?.trainer_type === "in_house") {
         setIsInHouseTrainer(true)
+      }
+      if (profile?.waiver_signed) {
+        setWaiverConfirmed(true)
+        setWaiverOnFile(true)
       }
 
       // Load available credits
@@ -114,7 +130,11 @@ export default function CheckoutPage() {
   }
 
   const total = getTotalCents()
-  const effectiveTotal = total - creditDiscountCents
+  const promoDiscountCents = appliedPromo?.discountCents ?? 0
+  const effectiveTotal = Math.max(
+    0,
+    total - creditDiscountCents - promoDiscountCents
+  )
 
   // Calculate total hours for the booking
   const totalBookingHours = items.reduce((hrs, item) => {
@@ -124,6 +144,56 @@ export default function CheckoutPage() {
     )
     return hrs + ms / (1000 * 60 * 60)
   }, 0)
+
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim()
+    if (!code) {
+      toast.error("Enter a promo code")
+      return
+    }
+    if (items.length !== 1) {
+      toast.error("Promo codes apply to single-item carts only")
+      return
+    }
+    setValidatingPromo(true)
+    const item = items[0]
+    const itemMs = item.slots.reduce(
+      (ms, s) => ms + (new Date(s.end).getTime() - new Date(s.start).getTime()),
+      0
+    )
+    const itemHours = itemMs / (1000 * 60 * 60)
+    const itemSubtotal =
+      item.pricePerUnit === "hour"
+        ? Math.round(item.priceCents * itemHours)
+        : item.priceCents
+
+    const res = await fetch("/api/promo-codes/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        rateType: item.rateType,
+        subtotalCents: itemSubtotal,
+      }),
+    })
+    const data = await res.json()
+    setValidatingPromo(false)
+
+    if (!data.valid) {
+      toast.error(data.error || "Invalid promo code")
+      return
+    }
+    setAppliedPromo({
+      code,
+      discountCents: Math.min(data.discount.amountOff, itemSubtotal),
+    })
+    toast.success(`Promo applied: -${formatCents(data.discount.amountOff)}`)
+  }
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null)
+    setPromoInput("")
+  }
 
   const getCreditPreview = (credit: UserCredit) => {
     if (credit.credit_type === "dollar") {
@@ -168,6 +238,8 @@ export default function CheckoutPage() {
           recurringPattern: item.isRecurring && item.recurringConfig
             ? item.recurringConfig
             : undefined,
+          promoCode:
+            appliedPromo && items.length === 1 ? appliedPromo.code : undefined,
         }),
       })
 
@@ -345,19 +417,25 @@ export default function CheckoutPage() {
               {formatCents(total)}
             </span>
           </div>
+          {appliedPromo && (
+            <div className="flex justify-between text-success text-sm">
+              <span>Promo {appliedPromo.code.toUpperCase()}</span>
+              <span>-{formatCents(appliedPromo.discountCents)}</span>
+            </div>
+          )}
           {creditApplied && creditDiscountCents > 0 && (
-            <>
-              <div className="flex justify-between text-success text-sm">
-                <span>Credit applied</span>
-                <span>-{formatCents(creditDiscountCents)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold">Remaining</span>
-                <span className="text-xl font-display font-bold text-brand-orange">
-                  {formatCents(effectiveTotal)}
-                </span>
-              </div>
-            </>
+            <div className="flex justify-between text-success text-sm">
+              <span>Credit applied</span>
+              <span>-{formatCents(creditDiscountCents)}</span>
+            </div>
+          )}
+          {(appliedPromo || (creditApplied && creditDiscountCents > 0)) && (
+            <div className="flex justify-between">
+              <span className="font-semibold">Total</span>
+              <span className="text-xl font-display font-bold text-brand-orange">
+                {formatCents(effectiveTotal)}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -374,26 +452,98 @@ export default function CheckoutPage() {
         />
       </div>
 
-      {/* Waiver */}
-      <div className="flex items-start gap-3 mb-6 bg-bg-secondary rounded-lg border border-border p-4">
-        <Checkbox
-          id="waiver"
-          checked={waiverConfirmed}
-          onCheckedChange={(c) => setWaiverConfirmed(c === true)}
-          className="mt-1"
-        />
-        <Label htmlFor="waiver" className="text-sm text-text-secondary cursor-pointer">
-          I have read and agree to the{" "}
-          <Link href="/waiver" className="text-brand-orange hover:underline" target="_blank">
-            Liability Waiver
-          </Link>{" "}
-          and assume all risks associated with using 863 Athletics facilities.
-        </Label>
-      </div>
+      {/* Promo code — single-item carts only, mutually exclusive with credits */}
+      {items.length === 1 && !creditApplied && (
+        <div className="mb-6 bg-bg-secondary rounded-lg border border-border p-4 space-y-3">
+          <Label className="flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            Discount Code
+          </Label>
+          {appliedPromo ? (
+            <div className="flex items-center justify-between gap-3 bg-success/10 border border-success/30 rounded-md px-3 py-2">
+              <div className="text-sm">
+                <span className="font-mono font-bold text-success">
+                  {appliedPromo.code.toUpperCase()}
+                </span>
+                <span className="text-text-secondary ml-2">
+                  -{formatCents(appliedPromo.discountCents)}
+                </span>
+              </div>
+              <button
+                onClick={handleRemovePromo}
+                className="text-text-muted hover:text-error transition-colors"
+                aria-label="Remove promo code"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    handleApplyPromo()
+                  }
+                }}
+                placeholder="Enter code"
+                className="bg-bg-elevated border-border font-mono uppercase"
+                maxLength={64}
+                disabled={validatingPromo}
+              />
+              <Button
+                onClick={handleApplyPromo}
+                disabled={validatingPromo || !promoInput.trim()}
+                variant="outline"
+                className="border-border shrink-0"
+              >
+                {validatingPromo ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Apply"
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Apply Credits — only available for single-item carts */}
+      {/* Waiver */}
+      {waiverOnFile ? (
+        <div className="flex items-center gap-2 mb-6 bg-bg-secondary rounded-lg border border-border px-4 py-3">
+          <CheckCircle className="h-4 w-4 text-success shrink-0" />
+          <span className="text-sm text-text-secondary">
+            Liability waiver on file
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 mb-6 bg-bg-secondary rounded-lg border border-border p-4">
+          <Checkbox
+            id="waiver"
+            checked={waiverConfirmed}
+            onCheckedChange={(c) => setWaiverConfirmed(c === true)}
+            className="mt-1"
+          />
+          <Label htmlFor="waiver" className="text-sm text-text-secondary cursor-pointer">
+            I have read and agree to the{" "}
+            <Link
+              href="/waiver?returnTo=/book/checkout"
+              className="text-brand-orange hover:underline"
+              target="_blank"
+            >
+              Liability Waiver
+            </Link>{" "}
+            and assume all risks associated with using 863 Athletics facilities.
+          </Label>
+        </div>
+      )}
+
+      {/* Apply Credits — only available for single-item carts, hidden when a promo is applied */}
       {availableCredits.length > 0 &&
         !creditApplied &&
+        !appliedPromo &&
         !isInHouseTrainer &&
         items.length === 1 && (
         <div className="bg-bg-secondary rounded-lg border border-border p-6 mb-6">

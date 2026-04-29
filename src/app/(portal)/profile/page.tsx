@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
@@ -10,14 +11,23 @@ import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
-import { Loader2, Save } from "lucide-react"
+import { Loader2, Save, LogOut } from "lucide-react"
 import type { Profile } from "@/types"
 
 export default function ProfilePage() {
+  const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [originalEmail, setOriginalEmail] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+
+  const handleLogout = async () => {
+    setSigningOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
 
   useEffect(() => {
     async function load() {
@@ -239,6 +249,29 @@ export default function ProfilePage() {
           )}
           Save Changes
         </Button>
+
+        <Card className="bg-bg-secondary border-border">
+          <CardHeader>
+            <CardTitle className="font-display uppercase tracking-wide">
+              Account
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={handleLogout}
+              disabled={signingOut}
+              variant="outline"
+              className="w-full border-border text-text-secondary hover:text-error hover:border-error"
+            >
+              {signingOut ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              Log Out
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { z } from "zod"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import { validatePromoCode } from "@/lib/promo-codes/validate"
 
 const createBookingSchema = z.object({
   rateId: z.string().uuid(),
@@ -36,6 +37,7 @@ const createBookingSchema = z.object({
     })
     .optional(),
   waiverConfirmed: z.boolean(),
+  promoCode: z.string().trim().min(1).max(64).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -87,13 +89,35 @@ export async function POST(req: NextRequest) {
     return ms + (new Date(slot.end).getTime() - new Date(slot.start).getTime())
   }, 0)
   const totalHours = totalMs / (1000 * 60 * 60)
-  let totalCents = rate.price_cents
+  let subtotalCents = rate.price_cents
 
   if (rate.per_unit === "hour") {
-    totalCents = Math.round(rate.price_cents * totalHours)
+    subtotalCents = Math.round(rate.price_cents * totalHours)
   } else if (rate.per_unit === "person") {
-    totalCents = Math.round(rate.price_cents * data.participantCount * totalHours)
+    subtotalCents = Math.round(rate.price_cents * data.participantCount * totalHours)
   }
+
+  // Re-validate the promo code server-side and apply the discount before
+  // inserting the booking, so totals are authoritative regardless of what the
+  // client sent.
+  let discountCents = 0
+  let promoToRedeem: { id: string; usage_count: number } | null = null
+  if (data.promoCode) {
+    const promoResult = await validatePromoCode(supabase, {
+      code: data.promoCode,
+      rateType: rate.type,
+      subtotalCents,
+    })
+    if (!promoResult.valid) {
+      return NextResponse.json({ error: promoResult.error }, { status: 400 })
+    }
+    discountCents = promoResult.discount.amountOff
+    promoToRedeem = {
+      id: promoResult.promo.id,
+      usage_count: promoResult.promo.usage_count,
+    }
+  }
+  const totalCents = Math.max(0, subtotalCents - discountCents)
 
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
@@ -104,7 +128,8 @@ export async function POST(req: NextRequest) {
       status: "pending_payment",
       payment_status: "unpaid",
       payment_method: data.paymentMethod,
-      subtotal_cents: totalCents,
+      subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
       total_cents: totalCents,
       participant_count: data.participantCount,
       notes: data.notes,
@@ -139,6 +164,15 @@ export async function POST(req: NextRequest) {
       { error: "Failed to create time slots — they may be taken" },
       { status: 409 }
     )
+  }
+
+  // Best-effort promo redemption. Racy under high concurrency, but acceptable
+  // for our usage volume — usage_limit is a soft cap.
+  if (promoToRedeem) {
+    await supabase
+      .from("promo_codes")
+      .update({ usage_count: promoToRedeem.usage_count + 1 })
+      .eq("id", promoToRedeem.id)
   }
 
   if (["zelle", "cash_app", "cash"].includes(data.paymentMethod)) {

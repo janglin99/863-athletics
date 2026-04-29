@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -36,12 +36,53 @@ This agreement shall be binding upon me, my heirs, executors, administrators, an
 
 Governing Law: This agreement shall be governed by the laws of the State of Florida.`
 
-export default function WaiverPage() {
+// Only allow same-origin paths so a malicious returnTo can't redirect off-site.
+function safeReturnTo(raw: string | null): string {
+  if (!raw) return "/book/checkout"
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/book/checkout"
+  return raw
+}
+
+function WaiverContent() {
   const [agreed, setAgreed] = useState(false)
   const [fullName, setFullName] = useState("")
   const [loading, setLoading] = useState(false)
   const [signed, setSigned] = useState(false)
+  const [alreadySignedChecked, setAlreadySignedChecked] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = safeReturnTo(searchParams.get("returnTo"))
+
+  // If the user has already signed, skip the form entirely and show the
+  // success view so they can continue without re-signing.
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (cancelled) return
+      if (!user) {
+        setAlreadySignedChecked(true)
+        return
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("waiver_signed")
+        .eq("id", user.id)
+        .single()
+      if (cancelled) return
+      if (profile?.waiver_signed) {
+        setSigned(true)
+      }
+      setAlreadySignedChecked(true)
+    }
+    check()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSign = async () => {
     if (!agreed || !fullName.trim()) {
@@ -80,17 +121,22 @@ export default function WaiverPage() {
           Waiver Signed
         </h1>
         <p className="text-text-secondary mb-8">
-          Thank you for signing the liability waiver. You&apos;re all set to
-          book your sessions.
+          Thank you — your waiver is on file. You&apos;re all set to book.
         </p>
         <Button
-          onClick={() => router.push("/book")}
+          onClick={() => router.push(returnTo)}
           className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
         >
-          Book a Session
+          Continue to Checkout
         </Button>
       </div>
     )
+  }
+
+  // Avoid a flash of the form before we know whether the user has already
+  // signed.
+  if (!alreadySignedChecked) {
+    return null
   }
 
   return (
@@ -161,5 +207,13 @@ export default function WaiverPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function WaiverPage() {
+  return (
+    <Suspense>
+      <WaiverContent />
+    </Suspense>
   )
 }
