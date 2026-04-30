@@ -51,7 +51,7 @@ export function AdminSidebar() {
   }
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 bg-bg-secondary border-r border-border min-h-screen p-4">
+    <aside className="hidden lg:flex flex-col w-64 bg-bg-secondary border-r border-border h-screen overflow-y-auto p-4">
       <div className="flex items-center gap-2 mb-8 px-3">
         <Shield className="h-6 w-6 text-brand-orange" />
         <span className="font-display font-bold uppercase tracking-wide">
