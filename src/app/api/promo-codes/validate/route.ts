@@ -4,12 +4,13 @@ import { validatePromoCode } from "@/lib/promo-codes/validate"
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
-  const { code, rateType, subtotalCents } = await req.json()
+  const { code, rateType, subtotalCents, hours } = await req.json()
 
   const result = await validatePromoCode(supabase, {
     code,
     rateType,
     subtotalCents,
+    hours,
   })
 
   if (!result.valid) {

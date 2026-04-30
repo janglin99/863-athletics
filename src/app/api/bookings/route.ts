@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
       code: data.promoCode,
       rateType: rate.type,
       subtotalCents,
+      hours: totalHours,
     })
     if (!promoResult.valid) {
       return NextResponse.json({ error: promoResult.error }, { status: 400 })

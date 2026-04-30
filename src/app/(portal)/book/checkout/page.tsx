@@ -174,6 +174,7 @@ export default function CheckoutPage() {
         code,
         rateType: item.rateType,
         subtotalCents: itemSubtotal,
+        hours: itemHours,
       }),
     })
     const data = await res.json()

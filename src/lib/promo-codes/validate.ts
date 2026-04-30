@@ -19,6 +19,9 @@ export interface ValidatePromoArgs {
   code: string
   rateType?: string | null
   subtotalCents?: number | null
+  // Required for fixed_rate_per_hour codes — used to compute the new total as
+  // hours × discount_value (cents). Ignored for other discount types.
+  hours?: number | null
 }
 
 export type ValidatePromoResult =
@@ -101,9 +104,23 @@ export async function validatePromoCode(
     }
   } else if (promo.discount_type === "fixed_amount") {
     amountOff = promo.discount_value
+  } else if (promo.discount_type === "fixed_rate_per_hour") {
+    // Replace the normal rate with discount_value (cents) per hour.
+    if (
+      args.hours !== undefined &&
+      args.hours !== null &&
+      args.subtotalCents !== undefined &&
+      args.subtotalCents !== null
+    ) {
+      const newTotalCents = Math.round(args.hours * promo.discount_value)
+      amountOff = Math.max(0, args.subtotalCents - newTotalCents)
+    } else {
+      return {
+        valid: false,
+        error: "Cannot apply per-hour promo without booking hours",
+      }
+    }
   }
-  // fixed_rate_per_hour replaces the rate — handled by callers that know the
-  // rate context.
 
   if (args.subtotalCents !== undefined && args.subtotalCents !== null) {
     amountOff = Math.min(amountOff, args.subtotalCents)
