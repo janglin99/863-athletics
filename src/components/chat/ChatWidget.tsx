@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MessageCircle, X, Send, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useCartStore } from "@/store/cartStore"
 
 const MARKDOWN_PATTERN = /(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|`[^`]+`)/g
 
@@ -91,6 +93,16 @@ export function ChatWidget() {
   const [sending, setSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Lift the chat bubble above the floating cart banner so it doesn't sit on
+  // top of the cart drawer trigger. Mirrors FloatingCartButton's hide rules
+  // so we don't lift when the banner isn't actually visible.
+  const pathname = usePathname()
+  const cartCount = useCartStore((s) => s.getItemCount())
+  const cartBannerVisible =
+    cartCount > 0 &&
+    !pathname.startsWith("/book/checkout") &&
+    !pathname.startsWith("/book/confirmation")
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -158,7 +170,11 @@ export function ChatWidget() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open chat assistant"
-          className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-40 h-14 w-14 rounded-full bg-brand-orange hover:bg-brand-orange-dark text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105"
+          className={cn(
+            "fixed right-4 z-40 h-14 w-14 rounded-full bg-brand-orange hover:bg-brand-orange-dark text-white shadow-lg flex items-center justify-center transition-all hover:scale-105",
+            cartBannerVisible ? "bottom-36" : "bottom-20",
+            "lg:bottom-6 lg:right-6"
+          )}
         >
           <MessageCircle className="h-6 w-6" />
         </button>
