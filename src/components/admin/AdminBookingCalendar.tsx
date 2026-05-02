@@ -152,17 +152,64 @@ export function AdminBookingCalendar() {
   const pillsByDay = useMemo<Record<string, Pill[]>>(() => {
     const byDay: Record<string, Pill[]> = {}
 
-    // First, build raw pills per ET date
+    // Step 1: collapse time-adjacent slots from the same booking into a
+    // single "session" so a 3-hour booking stored as 6 × 30-min slot rows
+    // renders as one pill, not six stacked ones.
+    type Session = {
+      anchorSlotId: string
+      bookingId: string
+      startIso: string
+      endIso: string
+      booking: SlotRow["booking"]
+    }
+    const slotsByBooking: Record<string, SlotRow[]> = {}
     for (const s of slots) {
       if (s.status === "cancelled") continue
-      const startET = isoToET(s.start_time)
-      const endET = isoToET(s.end_time)
-      // If slot spans midnight, clamp end to 24:00 for display purposes
+      ;(slotsByBooking[s.booking_id] ??= []).push(s)
+    }
+    const sessions: Session[] = []
+    for (const bookingId of Object.keys(slotsByBooking)) {
+      const list = slotsByBooking[bookingId].slice().sort(
+        (a, b) =>
+          new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      )
+      let cur: Session = {
+        anchorSlotId: list[0].id,
+        bookingId,
+        startIso: list[0].start_time,
+        endIso: list[0].end_time,
+        booking: list[0].booking,
+      }
+      for (let i = 1; i < list.length; i++) {
+        const s = list[i]
+        if (
+          new Date(s.start_time).getTime() === new Date(cur.endIso).getTime()
+        ) {
+          cur.endIso = s.end_time
+        } else {
+          sessions.push(cur)
+          cur = {
+            anchorSlotId: s.id,
+            bookingId,
+            startIso: s.start_time,
+            endIso: s.end_time,
+            booking: s.booking,
+          }
+        }
+      }
+      sessions.push(cur)
+    }
+
+    // Step 2: build a pill per session, binned by ET start date.
+    for (const ses of sessions) {
+      const startET = isoToET(ses.startIso)
+      const endET = isoToET(ses.endIso)
+      // If session spans midnight, clamp end to 24:00 for display purposes
       const endMin =
         endET.dateKey === startET.dateKey ? endET.minutes : 24 * 60
       const dayKey = startET.dateKey
 
-      const customer = s.booking?.customer
+      const customer = ses.booking?.customer
       const customerName = customer
         ? `${customer.first_name} ${customer.last_name}`
         : "Guest"
@@ -171,16 +218,16 @@ export function AdminBookingCalendar() {
       const endLabel = formatHourLabel(endMin)
 
       const pill: Pill = {
-        slotId: s.id,
-        bookingId: s.booking_id,
+        slotId: ses.anchorSlotId,
+        bookingId: ses.bookingId,
         startMin: Math.max(startET.minutes, DAY_START_MIN),
         endMin: Math.min(endMin, DAY_END_MIN),
         customerName,
         startLabel,
         endLabel,
-        color: s.booking?.rate?.color_hex || "#FF4700",
-        bookingStatus: s.booking?.status || "confirmed",
-        paymentStatus: s.booking?.payment_status || "unpaid",
+        color: ses.booking?.rate?.color_hex || "#FF4700",
+        bookingStatus: ses.booking?.status || "confirmed",
+        paymentStatus: ses.booking?.payment_status || "unpaid",
         col: 0,
         totalCols: 1,
       }
