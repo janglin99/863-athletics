@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { sendEmail } from "@/lib/resend/client"
 import { sendSMS } from "@/lib/twilio/client"
 import { z } from "zod"
@@ -153,7 +154,9 @@ export async function POST(req: NextRequest) {
     bookingInsert.payment_method = null
   }
 
-  const { data: booking, error: bookingError } = await supabase
+  // Admin is creating on behalf of someone else — service-role client
+  // bypasses the bookings_insert_own RLS policy (customer_id = auth.uid()).
+  const { data: booking, error: bookingError } = await supabaseAdmin
     .from("bookings")
     .insert(bookingInsert)
     .select()
@@ -173,12 +176,12 @@ export async function POST(req: NextRequest) {
     end_time: s.end,
     status: "scheduled",
   }))
-  const { error: slotsError } = await supabase
+  const { error: slotsError } = await supabaseAdmin
     .from("booking_slots")
     .insert(slotsData)
 
   if (slotsError) {
-    await supabase.from("bookings").delete().eq("id", booking.id)
+    await supabaseAdmin.from("bookings").delete().eq("id", booking.id)
     return NextResponse.json(
       { error: "Failed to create time slots — they may be taken" },
       { status: 409 }
@@ -187,7 +190,7 @@ export async function POST(req: NextRequest) {
 
   // Record payment row for paid/comp so reports tie out
   if ((isMarkPaid || isComp) && totalCents > 0) {
-    await supabase.from("payments").insert({
+    await supabaseAdmin.from("payments").insert({
       booking_id: booking.id,
       customer_id: data.customerId,
       amount_cents: totalCents,
@@ -297,7 +300,7 @@ export async function POST(req: NextRequest) {
 
     if (notifications.length > 0) {
       const now = new Date().toISOString()
-      await supabase.from("notification_log").insert(
+      await supabaseAdmin.from("notification_log").insert(
         notifications.map((n) => ({
           customer_id: data.customerId,
           booking_id: booking.id,

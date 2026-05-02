@@ -396,8 +396,8 @@ export function AdminCreateBookingDialog({
             </div>
           )}
 
-          {/* Date + slots */}
-          <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)]">
+          {/* Date + slots — stacked, so time grid always gets full dialog width */}
+          <div className="grid gap-4">
             <div>
               <Label className="block mb-2">Date</Label>
               <Calendar
