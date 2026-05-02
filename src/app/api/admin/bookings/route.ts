@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { sendEmail } from "@/lib/resend/client"
 import { sendSMS } from "@/lib/twilio/client"
+import { generateAccessCodes } from "@/lib/access-codes/generate"
 import { z } from "zod"
 
 const PAYMENT_METHODS = [
@@ -200,6 +202,14 @@ export async function POST(req: NextRequest) {
       manual_confirmed_at: new Date().toISOString(),
       notes: isComp ? "Admin-comped session" : "Admin-recorded payment",
     })
+  }
+
+  // mark_paid and comp bookings are confirmed immediately, so generate +
+  // deliver the Seam access codes after the response is sent. send_request
+  // bookings stay pending; the Stripe webhook / manual-confirm flow handles
+  // codes once the customer actually pays.
+  if (isMarkPaid || isComp) {
+    after(() => generateAccessCodes(booking.id))
   }
 
   // Notifications
