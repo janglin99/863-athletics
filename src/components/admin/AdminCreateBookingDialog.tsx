@@ -95,6 +95,7 @@ export function AdminCreateBookingDialog({
   const [paymentAction, setPaymentAction] = useState<PaymentAction>("mark_paid")
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [notify, setNotify] = useState(true)
+  const [compMode, setCompMode] = useState(false)
 
   const selectedCustomer = customers.find((c) => c.id === customerId)
   const selectedRate = rates.find((r) => r.id === rateId)
@@ -216,26 +217,53 @@ export function AdminCreateBookingDialog({
     setPaymentAction("mark_paid")
     setPaymentMethod("cash")
     setNotify(true)
+    setCompMode(false)
   }
+
+  // For comp-session mode we still need a valid rate_id (the API requires
+  // one). Prefer a rate that looks like a "Comp" placeholder, else fall back
+  // to the first active rate; price gets zeroed via overrideTotalCents.
+  const compFallbackRateId = useMemo(() => {
+    const compRate = rates.find(
+      (r) =>
+        r.name.toLowerCase().includes("comp") ||
+        r.type.toLowerCase().includes("comp")
+    )
+    return compRate?.id || rates[0]?.id || ""
+  }, [rates])
 
   const handleSubmit = async () => {
     if (!customerId) return toast.error("Select a customer")
-    if (!rateId) return toast.error("Select a rate")
+    const effectiveRateId = compMode ? compFallbackRateId : rateId
+    if (!effectiveRateId) {
+      return toast.error(
+        compMode
+          ? "No rates configured — add a rate before creating comp sessions"
+          : "Select a rate"
+      )
+    }
     if (selectedSlots.length === 0) return toast.error("Select time slots")
 
     setSubmitting(true)
+    const effectivePaymentAction: PaymentAction = compMode
+      ? "comp"
+      : paymentAction
     const payload: Record<string, unknown> = {
       customerId,
-      rateId,
+      rateId: effectiveRateId,
       slots: selectedSlots,
       participantCount,
       notes: notes || undefined,
-      paymentAction,
+      paymentAction: effectivePaymentAction,
       notify,
     }
-    if (paymentAction === "mark_paid") payload.paymentMethod = paymentMethod
-    if (paymentAction === "comp") {
-      payload.overrideTotalCents = overrideCents ?? 0
+    if (effectivePaymentAction === "mark_paid")
+      payload.paymentMethod = paymentMethod
+    if (effectivePaymentAction === "comp") {
+      payload.overrideTotalCents = compMode ? 0 : overrideCents ?? 0
+      payload.internalNotes = compMode
+        ? "Quick comp session — no rate selected by admin"
+        : undefined
     } else if (overrideCents !== null) {
       payload.overrideTotalCents = overrideCents
     }
@@ -274,7 +302,7 @@ export function AdminCreateBookingDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="bg-bg-secondary border-border max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-bg-secondary border-border max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display uppercase tracking-wide">
             New Session for User
@@ -338,25 +366,38 @@ export function AdminCreateBookingDialog({
             )}
           </div>
 
-          {/* Rate */}
-          <div className="space-y-2">
-            <Label>Rate</Label>
-            <Select value={rateId} onValueChange={(v) => v && setRateId(v)}>
-              <SelectTrigger className="bg-bg-elevated border-border">
-                <SelectValue placeholder="Select a rate..." />
-              </SelectTrigger>
-              <SelectContent>
-                {rates.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.name} — {formatCents(r.price_cents)}/{r.per_unit}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Quick Comp Session toggle */}
+          <div className="flex items-center justify-between bg-bg-elevated rounded-md border border-border px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Quick comp session</p>
+              <p className="text-xs text-text-muted">
+                Skip rate / payment — books a free session for the customer.
+              </p>
+            </div>
+            <Switch checked={compMode} onCheckedChange={setCompMode} />
           </div>
 
+          {/* Rate */}
+          {!compMode && (
+            <div className="space-y-2">
+              <Label>Rate</Label>
+              <Select value={rateId} onValueChange={(v) => v && setRateId(v)}>
+                <SelectTrigger className="bg-bg-elevated border-border">
+                  <SelectValue placeholder="Select a rate..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {rates.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name} — {formatCents(r.price_cents)}/{r.per_unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Date + slots */}
-          <div className="grid gap-4 md:grid-cols-[auto_1fr]">
+          <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)]">
             <div>
               <Label className="block mb-2">Date</Label>
               <Calendar
@@ -424,39 +465,50 @@ export function AdminCreateBookingDialog({
           </div>
 
           {/* Fee summary + override */}
-          <div className="bg-bg-elevated rounded-lg border border-border p-4 space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-text-secondary">Calculated total</span>
-              <span className="font-display font-bold">
-                {formatCents(calculatedCents)}
-              </span>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">
-                Override fee{" "}
-                <span className="text-text-muted">
-                  (leave blank to use calculated)
-                </span>
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={overrideFee}
-                onChange={(e) => setOverrideFee(e.target.value)}
-                className="bg-bg-secondary border-border"
-              />
-            </div>
-            <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
+          {compMode ? (
+            <div className="bg-bg-elevated rounded-lg border border-border p-4 flex items-center justify-between text-sm">
               <span className="text-text-secondary">Final total</span>
               <span className="font-display font-bold text-brand-orange">
-                {formatCents(finalCents)}
+                FREE
               </span>
             </div>
-          </div>
+          ) : (
+            <div className="bg-bg-elevated rounded-lg border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-text-secondary">Calculated total</span>
+                <span className="font-display font-bold">
+                  {formatCents(calculatedCents)}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  Override fee{" "}
+                  <span className="text-text-muted">
+                    (leave blank to use calculated)
+                  </span>
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={overrideFee}
+                  onChange={(e) => setOverrideFee(e.target.value)}
+                  className="bg-bg-secondary border-border"
+                />
+              </div>
+              <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
+                <span className="text-text-secondary">Final total</span>
+                <span className="font-display font-bold text-brand-orange">
+                  {formatCents(finalCents)}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Payment action */}
+          {!compMode && (
+          <>
           <div className="space-y-2">
             <Label>Payment</Label>
             <div className="grid grid-cols-3 gap-2">
@@ -508,6 +560,8 @@ export function AdminCreateBookingDialog({
                 </SelectContent>
               </Select>
             </div>
+          )}
+          </>
           )}
 
           {/* Notify */}

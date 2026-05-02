@@ -154,7 +154,7 @@ export function TimeSlotGrid({
       </div>
 
       {/* Time grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
         {slots.map((slot, index) => {
           const selected = isSlotSelected(index)
           const isDisabled = !slot.available
@@ -172,7 +172,7 @@ export function TimeSlotGrid({
               onClick={() => handleSlotClick(index)}
               disabled={isDisabled}
               className={cn(
-                "px-3 py-2.5 rounded-md text-sm font-medium transition-all relative",
+                "px-2 py-2.5 rounded-md text-sm font-medium transition-all relative whitespace-nowrap",
                 selected
                   ? "bg-brand-orange text-white shadow-lg shadow-brand-orange/25"
                   : isEndButton
