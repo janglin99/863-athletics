@@ -55,6 +55,18 @@ export async function generateAccessCodes(bookingId: string) {
 
   if (slots.length === 0) return
 
+  // Avoid duplicate codes when this is rerun (e.g., admin clicks
+  // "Regenerate" on a booking that already has codes for some sessions).
+  // We only skip sessions whose anchor slot already has a non-failed code.
+  const { data: existingCodes } = await supabaseAdmin
+    .from("access_codes")
+    .select("booking_slot_id")
+    .eq("booking_id", bookingId)
+    .neq("status", "failed")
+  const existingSlotIds = new Set(
+    (existingCodes ?? []).map((c) => c.booking_slot_id)
+  )
+
   // Merge consecutive slots into sessions
   const sessions: { start: Date; end: Date; slotId: string }[] = []
   let cur = {
@@ -79,6 +91,7 @@ export async function generateAccessCodes(bookingId: string) {
   sessions.push(cur)
 
   for (const session of sessions) {
+    if (existingSlotIds.has(session.slotId)) continue
     try {
       const startsAt = new Date(session.start.getTime() - 30 * 60000)
       const endsAt = new Date(session.end.getTime() + 30 * 60000)

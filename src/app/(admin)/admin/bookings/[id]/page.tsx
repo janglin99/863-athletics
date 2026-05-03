@@ -43,6 +43,7 @@ export default function AdminBookingDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [generatingCodes, setGeneratingCodes] = useState(false)
 
   const reload = useCallback(async () => {
     const res = await fetch(`/api/bookings/${params.id}`)
@@ -94,6 +95,23 @@ export default function AdminBookingDetailPage() {
 
     toast.success("Booking deleted")
     router.push("/admin/bookings")
+  }
+
+  const handleGenerateCodes = async () => {
+    if (!booking) return
+    setGeneratingCodes(true)
+    const res = await fetch(
+      `/api/admin/bookings/${booking.id}/access-codes`,
+      { method: "POST" }
+    )
+    setGeneratingCodes(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast.error(data.error || "Failed to generate codes")
+      return
+    }
+    toast.success("Access codes requested — refreshing")
+    await reload()
   }
 
   const handleConfirmPayment = async () => {
@@ -283,7 +301,7 @@ export default function AdminBookingDetailPage() {
               Access Codes
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {booking.access_codes && booking.access_codes.length > 0 ? (
               <div className="space-y-2">
                 {booking.access_codes.map((code) => (
@@ -305,6 +323,22 @@ export default function AdminBookingDetailPage() {
                 No access codes generated yet
               </p>
             )}
+            <Button
+              onClick={handleGenerateCodes}
+              disabled={generatingCodes}
+              variant="outline"
+              size="sm"
+              className="w-full border-border"
+            >
+              {generatingCodes ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Key className="mr-2 h-4 w-4" />
+              )}
+              {booking.access_codes && booking.access_codes.length > 0
+                ? "Regenerate / re-send codes"
+                : "Generate & send access codes"}
+            </Button>
           </CardContent>
         </Card>
       </div>
