@@ -24,6 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { BookingStatusBadge } from "@/components/booking/BookingStatusBadge"
 import { formatCents, formatDateTime, formatPhone } from "@/lib/utils/format"
 import { toast } from "sonner"
@@ -222,6 +223,28 @@ export default function AdminCustomerDetailPage() {
     return `${Number(credit.remaining_amount)} / ${Number(credit.original_amount)} sessions`
   }
 
+  const handleNotificationToggle = async (
+    field: "notification_email" | "notification_sms" | "notification_reminders",
+    next: boolean
+  ) => {
+    if (!customer) return
+    const prev = customer[field]
+    // Optimistic update so the switch reflects immediately
+    setCustomer({ ...customer, [field]: next })
+    const supabase = createClient()
+    const { error } = await supabase
+      .from("profiles")
+      .update({ [field]: next })
+      .eq("id", customer.id)
+    if (error) {
+      // Revert on failure
+      setCustomer({ ...customer, [field]: prev })
+      toast.error("Failed to update notification preference")
+      return
+    }
+    toast.success("Notification preference updated")
+  }
+
   const handleRoleChange = async () => {
     if (!customer) return
     setSaving(true)
@@ -402,6 +425,59 @@ export default function AdminCustomerDetailPage() {
                 </div>
               </DialogContent>
             </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-bg-secondary border-border mb-6">
+        <CardHeader>
+          <CardTitle className="font-display uppercase tracking-wide text-sm">
+            Notifications
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Email notifications</p>
+              <p className="text-xs text-text-muted">
+                Booking confirmations, payment requests, access codes
+              </p>
+            </div>
+            <Switch
+              checked={customer.notification_email}
+              onCheckedChange={(c) =>
+                handleNotificationToggle("notification_email", c)
+              }
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">SMS notifications</p>
+              <p className="text-xs text-text-muted">
+                Access codes and booking texts to{" "}
+                {customer.phone ? formatPhone(customer.phone) : "(no phone)"}
+              </p>
+            </div>
+            <Switch
+              checked={customer.notification_sms}
+              onCheckedChange={(c) =>
+                handleNotificationToggle("notification_sms", c)
+              }
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Session reminders</p>
+              <p className="text-xs text-text-muted">
+                24h and 1h before each session
+              </p>
+            </div>
+            <Switch
+              checked={customer.notification_reminders}
+              onCheckedChange={(c) =>
+                handleNotificationToggle("notification_reminders", c)
+              }
+            />
           </div>
         </CardContent>
       </Card>
