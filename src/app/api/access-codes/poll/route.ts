@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { deliverAccessCodes } from "@/lib/access-codes/generate"
 import { Seam } from "seam"
 
 export async function POST(req: NextRequest) {
@@ -29,6 +31,7 @@ export async function POST(req: NextRequest) {
 
     const seam = new Seam({ apiKey: process.env.SEAM_API_KEY })
     let updated = 0
+    const promotedBookingIds = new Set<string>()
 
     for (const code of pendingCodes) {
       // Only process codes belonging to the current user (or admin)
@@ -55,10 +58,23 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", code.id)
           updated++
+          promotedBookingIds.add(code.booking_id)
         }
       } catch {
         // Code not ready yet or error — skip
       }
+    }
+
+    // Deliver any codes that were promoted just now. deliverAccessCodes is
+    // idempotent — sent_email/sent_sms flags prevent re-sending — so even if
+    // some codes for this booking were already delivered earlier, only the
+    // newly-active ones go out. Run after the response so polling stays fast.
+    if (promotedBookingIds.size > 0) {
+      after(async () => {
+        for (const bookingId of promotedBookingIds) {
+          await deliverAccessCodes(bookingId)
+        }
+      })
     }
 
     return NextResponse.json({ updated })
