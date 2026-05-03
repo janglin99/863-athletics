@@ -154,7 +154,7 @@ export async function deliverAccessCodes(bookingId: string) {
   const { data: booking } = await supabaseAdmin
     .from("bookings")
     .select(
-      "booking_number, customer:profiles!customer_id(first_name, email, phone, notification_email, notification_sms)"
+      "booking_number, customer_id, customer:profiles!customer_id(first_name, email, phone, notification_email, notification_sms)"
     )
     .eq("id", bookingId)
     .single()
@@ -237,7 +237,8 @@ export async function deliverAccessCodes(bookingId: string) {
     ].join("\n")
 
     try {
-      await sendEmail({ to: customer.email, subject, text })
+      const result = await sendEmail({ to: customer.email, subject, text })
+      const messageId = result?.data?.id ?? null
       await supabaseAdmin
         .from("access_codes")
         .update({ sent_email: true })
@@ -245,6 +246,23 @@ export async function deliverAccessCodes(bookingId: string) {
           "id",
           emailCandidates.map((c) => c.id)
         )
+      // Record one notification_log row so the Resend webhook can later
+      // update its delivery / bounce status by provider_id.
+      const bookingCustomerId = (
+        booking as { customer_id?: string | null }
+      ).customer_id ?? null
+      await supabaseAdmin.from("notification_log").insert({
+        customer_id: bookingCustomerId,
+        booking_id: bookingId,
+        type: "access_code_sent",
+        channel: "email",
+        recipient: customer.email,
+        subject,
+        preview: text.slice(0, 140),
+        status: "sent",
+        provider_id: messageId,
+        sent_at: new Date().toISOString(),
+      })
     } catch {
       // best-effort; leave sent_email false so a retry can re-attempt
     }
