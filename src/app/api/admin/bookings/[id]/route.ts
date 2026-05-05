@@ -225,7 +225,23 @@ export async function PATCH(
     )
   }
 
-  return NextResponse.json({ booking: updated })
+  // Detect overpayment so the client can offer to refund or grant credit.
+  const completedPaid = (updated.payments ?? [])
+    .filter(
+      (p: { status: string }) =>
+        p.status === "completed" || p.status === "partially_refunded"
+    )
+    .reduce(
+      (sum: number, p: { amount_cents: number; refunded_amount_cents?: number }) =>
+        sum + (p.amount_cents ?? 0) - (p.refunded_amount_cents ?? 0),
+      0
+    )
+  const overpaymentCents = Math.max(0, completedPaid - (updated.total_cents ?? 0))
+
+  return NextResponse.json({
+    booking: updated,
+    overpaymentCents: overpaymentCents > 0 ? overpaymentCents : null,
+  })
 }
 
 export async function DELETE(

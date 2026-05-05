@@ -104,6 +104,8 @@ export function AdminBookingEditDialog({
   const [slots, setSlots] = useState<SlotEdit[]>([])
   const [saving, setSaving] = useState(false)
   const [promoCode, setPromoCode] = useState("")
+  const [overpaymentCents, setOverpaymentCents] = useState<number | null>(null)
+  const [resolving, setResolving] = useState<"refund" | "credit" | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -187,7 +189,102 @@ export function AdminBookingEditDialog({
 
     toast.success("Booking updated")
     onSaved()
+
+    // If the new total leaves the customer overpaid (typically because a
+    // promo was applied retroactively after they'd already paid), keep the
+    // dialog open with a follow-up prompt to refund or grant a credit.
+    if (typeof data.overpaymentCents === "number" && data.overpaymentCents > 0) {
+      setOverpaymentCents(data.overpaymentCents)
+    } else {
+      onOpenChange(false)
+    }
+  }
+
+  const handleResolveOverpayment = async (action: "refund" | "credit") => {
+    setResolving(action)
+    const res = await fetch(
+      `/api/admin/bookings/${booking.id}/resolve-overpayment`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      }
+    )
+    const data = await res.json()
+    setResolving(null)
+    if (!res.ok) {
+      toast.error(typeof data.error === "string" ? data.error : "Failed")
+      return
+    }
+    toast.success(
+      action === "refund"
+        ? `Refund issued via Stripe (-$${(data.amountCents / 100).toFixed(2)})`
+        : `Credit granted ($${(data.amountCents / 100).toFixed(2)})`
+    )
+    onSaved()
+    setOverpaymentCents(null)
     onOpenChange(false)
+  }
+
+  const handleSkipOverpayment = () => {
+    setOverpaymentCents(null)
+    onOpenChange(false)
+  }
+
+  if (overpaymentCents !== null && overpaymentCents > 0) {
+    const dollars = (overpaymentCents / 100).toFixed(2)
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="bg-bg-secondary border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display uppercase tracking-wide">
+              Customer Overpaid ${dollars}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-text-secondary">
+              The booking&apos;s new total is lower than what was already
+              collected. How do you want to make the customer whole?
+            </p>
+            <div className="grid gap-2">
+              <Button
+                onClick={() => handleResolveOverpayment("refund")}
+                disabled={resolving !== null}
+                className="bg-brand-orange hover:bg-brand-orange-dark text-white"
+              >
+                {resolving === "refund" && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Refund ${dollars} via Stripe
+              </Button>
+              <Button
+                onClick={() => handleResolveOverpayment("credit")}
+                disabled={resolving !== null}
+                variant="outline"
+                className="border-border"
+              >
+                {resolving === "credit" && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Grant ${dollars} as account credit
+              </Button>
+              <Button
+                onClick={handleSkipOverpayment}
+                disabled={resolving !== null}
+                variant="ghost"
+                className="text-text-muted"
+              >
+                Skip — handle out-of-band
+              </Button>
+            </div>
+            <p className="text-xs text-text-muted">
+              Refund only works for Stripe payments. For cash / Zelle / Cash
+              App, choose credit or skip and resolve manually.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   return (
