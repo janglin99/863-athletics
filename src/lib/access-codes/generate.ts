@@ -55,9 +55,36 @@ export async function generateAccessCodes(bookingId: string) {
 
   if (slots.length === 0) return
 
-  // Avoid duplicate codes when this is rerun (e.g., admin clicks
-  // "Regenerate" on a booking that already has codes for some sessions).
-  // We only skip sessions whose anchor slot already has a non-failed code.
+  // First pass: re-fetch any rows still stuck on pin_code='GENERATING'.
+  // Igloohome offline codes can take longer than the 2-second wait below to
+  // surface a PIN, so when an admin reruns this we ask Seam for the current
+  // value and promote pending → active when ready.
+  const { data: pendingCodes } = await supabaseAdmin
+    .from("access_codes")
+    .select("id, seam_access_code_id, booking_slot_id")
+    .eq("booking_id", bookingId)
+    .eq("status", "pending")
+    .not("seam_access_code_id", "is", null)
+
+  for (const pending of pendingCodes ?? []) {
+    if (!pending.seam_access_code_id) continue
+    try {
+      const fetched = await seam.accessCodes.get({
+        access_code_id: pending.seam_access_code_id,
+      })
+      if (fetched.code) {
+        await supabaseAdmin
+          .from("access_codes")
+          .update({ pin_code: fetched.code, status: "active" })
+          .eq("id", pending.id)
+      }
+    } catch {
+      // Still not ready — leave as pending.
+    }
+  }
+
+  // Avoid duplicate codes when this is rerun. We only skip sessions whose
+  // anchor slot already has a non-failed code (active or pending).
   const { data: existingCodes } = await supabaseAdmin
     .from("access_codes")
     .select("booking_slot_id")

@@ -25,6 +25,7 @@ import {
   Calendar as CalendarIcon,
   Trash2,
   Tag,
+  Key,
   Loader2,
 } from "lucide-react"
 import {
@@ -69,6 +70,7 @@ export default function AdminBookingsPage() {
   const [bulkPromoOpen, setBulkPromoOpen] = useState(false)
   const [bulkPromoCode, setBulkPromoCode] = useState("")
   const [applyingPromo, setApplyingPromo] = useState(false)
+  const [refreshingCodes, setRefreshingCodes] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupBy>("none")
 
   const loadBookings = useCallback(async () => {
@@ -263,6 +265,36 @@ export default function AdminBookingsPage() {
     )
   }
 
+  const handleBulkRefreshCodes = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setRefreshingCodes(true)
+    const res = await fetch("/api/admin/bookings/bulk-refresh-codes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookingIds: ids }),
+    })
+    const data = await res.json()
+    setRefreshingCodes(false)
+    if (!res.ok) {
+      toast.error(typeof data.error === "string" ? data.error : "Failed")
+      return
+    }
+    if (data.failed === 0) {
+      toast.success(
+        `Refreshed access codes on ${data.refreshed} booking${
+          data.refreshed === 1 ? "" : "s"
+        }`
+      )
+    } else {
+      toast.warning(
+        `Refreshed ${data.refreshed} of ${ids.length}. ${data.failed} failed: ${data.failureReasons?.[0] ?? "unknown"}`
+      )
+    }
+    clearSelection()
+    await loadBookings()
+  }
+
   const handleBulkApplyPromo = async () => {
     const code = bulkPromoCode.trim()
     if (!code) {
@@ -444,6 +476,20 @@ export default function AdminBookingsPage() {
                     className="text-text-secondary"
                   >
                     Clear
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkRefreshCodes}
+                    disabled={refreshingCodes}
+                    className="border-border"
+                  >
+                    {refreshingCodes ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Key className="h-4 w-4 mr-1" />
+                    )}
+                    Refresh codes
                   </Button>
                   <Button
                     variant="outline"
