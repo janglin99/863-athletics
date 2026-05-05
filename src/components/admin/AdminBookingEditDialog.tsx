@@ -103,6 +103,7 @@ export function AdminBookingEditDialog({
   )
   const [slots, setSlots] = useState<SlotEdit[]>([])
   const [saving, setSaving] = useState(false)
+  const [promoCode, setPromoCode] = useState("")
 
   useEffect(() => {
     if (!open) return
@@ -124,6 +125,7 @@ export function AdminBookingEditDialog({
           end: isoToFacilityLocal(s.end_time),
         }))
     )
+    setPromoCode("")
   }, [open, booking])
 
   const handleSlotChange = (
@@ -155,13 +157,16 @@ export function AdminBookingEditDialog({
     }
 
     setSaving(true)
+    const trimmedPromo = promoCode.trim()
     const res = await fetch(`/api/admin/bookings/${booking.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         notes,
         internalNotes,
-        totalCents: cents,
+        // Skip totalCents if a promo is being applied — server recomputes
+        // authoritatively from the rate × hours and the promo's discount.
+        ...(trimmedPromo ? {} : { totalCents: cents }),
         status,
         paymentStatus,
         slots: slots.map((s) => ({
@@ -169,6 +174,7 @@ export function AdminBookingEditDialog({
           start: facilityLocalToIso(s.start),
           end: facilityLocalToIso(s.end),
         })),
+        ...(trimmedPromo ? { promoCode: trimmedPromo } : {}),
       }),
     })
     const data = await res.json()
@@ -236,10 +242,31 @@ export function AdminBookingEditDialog({
               value={totalDollars}
               onChange={(e) => setTotalDollars(e.target.value)}
               className="bg-bg-elevated border-border"
+              disabled={promoCode.trim().length > 0}
             />
             <p className="text-xs text-text-muted">
-              Updates both subtotal and total. Doesn&apos;t adjust existing
-              payment records.
+              {promoCode.trim()
+                ? "Total will be recalculated from the promo code on save."
+                : "Updates both subtotal and total. Doesn't adjust existing payment records."}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">
+              Apply discount code{" "}
+              <span className="text-text-muted">(optional)</span>
+            </Label>
+            <Input
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              placeholder="GLAM"
+              className="bg-bg-elevated border-border font-mono uppercase"
+              maxLength={64}
+            />
+            <p className="text-xs text-text-muted">
+              Server re-validates and recomputes the booking total. Increments
+              the code&apos;s usage count. Doesn&apos;t adjust existing payment
+              records — handle any refund / credit separately.
             </p>
           </div>
 

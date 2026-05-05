@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { validatePromoCode } from "@/lib/promo-codes/validate"
 import { z } from "zod"
 
 const BOOKING_STATUSES = [
@@ -35,6 +36,10 @@ const patchSchema = z
     status: z.enum(BOOKING_STATUSES).optional(),
     paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
     slots: z.array(slotPatchSchema).max(50).optional(),
+    // When provided, server re-validates and applies the promo authoritatively
+    // (computes new subtotal/discount/total, increments usage_count). Wins
+    // over a manually-passed totalCents.
+    promoCode: z.string().trim().min(1).max(64).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: "Provide at least one field to update",
@@ -86,6 +91,92 @@ export async function PATCH(
   if (data.status !== undefined) update.status = data.status
   if (data.paymentStatus !== undefined) update.payment_status = data.paymentStatus
 
+  // Promo retro-application: server re-validates and overrides totals so the
+  // admin doesn't have to compute the discount themselves.
+  let promoToRedeem: { id: string; usage_count: number } | null = null
+  if (data.promoCode) {
+    const { data: bookingRow } = await auth.supabase
+      .from("bookings")
+      .select(
+        "participant_count, internal_notes, rate:rates(type, price_cents, per_unit), slots:booking_slots(start_time, end_time, status)"
+      )
+      .eq("id", id)
+      .single()
+
+    type RateLite = {
+      type: string
+      price_cents: number
+      per_unit: "session" | "hour" | "month" | "person"
+    }
+    type SlotLite = {
+      start_time: string
+      end_time: string
+      status: string
+    }
+    const rate = (
+      Array.isArray(bookingRow?.rate) ? bookingRow?.rate[0] : bookingRow?.rate
+    ) as RateLite | null
+    const slots = ((bookingRow?.slots ?? []) as SlotLite[]).filter(
+      (s) => s.status !== "cancelled"
+    )
+
+    if (!bookingRow || !rate) {
+      return NextResponse.json(
+        { error: "Booking or rate not found" },
+        { status: 404 }
+      )
+    }
+
+    const totalMs = slots.reduce(
+      (ms, s) =>
+        ms + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()),
+      0
+    )
+    const totalHours = totalMs / (1000 * 60 * 60)
+    let grossSubtotal = rate.price_cents
+    if (rate.per_unit === "hour") {
+      grossSubtotal = Math.round(rate.price_cents * totalHours)
+    } else if (rate.per_unit === "person") {
+      grossSubtotal = Math.round(
+        rate.price_cents *
+          (bookingRow.participant_count ?? 1) *
+          totalHours
+      )
+    }
+
+    const result = await validatePromoCode(auth.supabase, {
+      code: data.promoCode,
+      rateType: rate.type,
+      subtotalCents: grossSubtotal,
+      hours: totalHours,
+    })
+    if (!result.valid) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    const discountCents = result.discount.amountOff
+    const newTotal = Math.max(0, grossSubtotal - discountCents)
+    update.subtotal_cents = grossSubtotal
+    update.discount_cents = discountCents
+    update.total_cents = newTotal
+
+    // Append a trail note unless the admin is also setting internal_notes
+    // explicitly in this patch.
+    if (data.internalNotes === undefined) {
+      const codeLabel = data.promoCode.toUpperCase()
+      const trail = `Promo ${codeLabel} applied retroactively (-$${(
+        discountCents / 100
+      ).toFixed(2)})`
+      const existing = (bookingRow.internal_notes ?? "").toString().trim()
+      update.internal_notes = existing ? `${existing} | ${trail}` : trail
+    }
+
+    promoToRedeem = {
+      id: result.promo.id,
+      usage_count: result.promo.usage_count,
+    }
+  }
+
   if (Object.keys(update).length > 0) {
     const { error: bookingErr } = await auth.supabase
       .from("bookings")
@@ -94,6 +185,13 @@ export async function PATCH(
     if (bookingErr) {
       return NextResponse.json({ error: bookingErr.message }, { status: 500 })
     }
+  }
+
+  if (promoToRedeem) {
+    await auth.supabase
+      .from("promo_codes")
+      .update({ usage_count: promoToRedeem.usage_count + 1 })
+      .eq("id", promoToRedeem.id)
   }
 
   if (data.slots && data.slots.length > 0) {
