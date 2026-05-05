@@ -19,7 +19,21 @@ import { AdminCreateBookingDialog } from "@/components/admin/AdminCreateBookingD
 import { AdminBookingCalendar } from "@/components/admin/AdminBookingCalendar"
 import { formatCents, formatDate, formatDateTime } from "@/lib/utils/format"
 import { toast } from "sonner"
-import { Search, List, Calendar as CalendarIcon, Trash2, Loader2 } from "lucide-react"
+import {
+  Search,
+  List,
+  Calendar as CalendarIcon,
+  Trash2,
+  Tag,
+  Loader2,
+} from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import type { Booking } from "@/types"
 
 type GroupBy = "none" | "customer" | "date"
@@ -52,6 +66,9 @@ export default function AdminBookingsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [bulkPromoOpen, setBulkPromoOpen] = useState(false)
+  const [bulkPromoCode, setBulkPromoCode] = useState("")
+  const [applyingPromo, setApplyingPromo] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupBy>("none")
 
   const loadBookings = useCallback(async () => {
@@ -246,6 +263,56 @@ export default function AdminBookingsPage() {
     )
   }
 
+  const handleBulkApplyPromo = async () => {
+    const code = bulkPromoCode.trim()
+    if (!code) {
+      toast.error("Enter a promo code")
+      return
+    }
+    const ids = Array.from(selectedIds)
+    setApplyingPromo(true)
+    const res = await fetch("/api/admin/bookings/bulk-apply-promo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookingIds: ids, promoCode: code }),
+    })
+    const data = await res.json()
+    setApplyingPromo(false)
+
+    if (!res.ok) {
+      toast.error(typeof data.error === "string" ? data.error : "Failed")
+      return
+    }
+
+    const appliedCount = data.applied?.length ?? 0
+    const skippedCount = data.skipped?.length ?? 0
+    const totalDiscount = data.totalDiscountCents ?? 0
+    const totalOver = data.totalOverpaymentCents ?? 0
+
+    if (appliedCount === 0) {
+      const reason: string =
+        data.skipped?.[0]?.reason ?? "No bookings updated"
+      toast.error(`Nothing applied: ${reason}`)
+    } else {
+      const overNote =
+        totalOver > 0
+          ? ` · $${(totalOver / 100).toFixed(2)} overpaid across ${appliedCount} bookings — review individually.`
+          : ""
+      const skipNote =
+        skippedCount > 0
+          ? ` · ${skippedCount} skipped (${data.skipped[0].reason})`
+          : ""
+      toast.success(
+        `Applied to ${appliedCount} (-$${(totalDiscount / 100).toFixed(2)}).${skipNote}${overNote}`
+      )
+    }
+
+    setBulkPromoOpen(false)
+    setBulkPromoCode("")
+    clearSelection()
+    await loadBookings()
+  }
+
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
@@ -381,6 +448,15 @@ export default function AdminBookingsPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setBulkPromoOpen(true)}
+                    className="border-border"
+                  >
+                    <Tag className="h-4 w-4 mr-1" />
+                    Apply discount
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setConfirmDeleteOpen(true)}
                     className="border-error/40 text-error hover:bg-error/10"
                   >
@@ -462,6 +538,65 @@ export default function AdminBookingsPage() {
           onConfirm={handleBulkDelete}
           variant="destructive"
         />
+      )}
+
+      {isSuperAdmin && (
+        <Dialog open={bulkPromoOpen} onOpenChange={setBulkPromoOpen}>
+          <DialogContent className="bg-bg-secondary border-border max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display uppercase tracking-wide">
+                Apply discount to {selectedIds.size} booking
+                {selectedIds.size === 1 ? "" : "s"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label className="text-xs">Promo code</Label>
+                <Input
+                  value={bulkPromoCode}
+                  onChange={(e) => setBulkPromoCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleBulkApplyPromo()
+                    }
+                  }}
+                  placeholder="GLAM"
+                  className="bg-bg-elevated border-border font-mono uppercase"
+                  maxLength={64}
+                  disabled={applyingPromo}
+                />
+              </div>
+              <p className="text-xs text-text-muted">
+                Server validates the code against each booking and recomputes
+                its total. Counts as 1 redemption for the whole batch.
+                Bookings that already have a discount are skipped. Doesn&apos;t
+                touch payments — review individual bookings to refund or
+                credit overpayments.
+              </p>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkPromoOpen(false)}
+                  disabled={applyingPromo}
+                  className="flex-1 border-border"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleBulkApplyPromo}
+                  disabled={applyingPromo || !bulkPromoCode.trim()}
+                  className="flex-1 bg-brand-orange hover:bg-brand-orange-dark text-white"
+                >
+                  {applyingPromo && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {deleting && (
