@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
-interface SlotWithBooking {
+interface SlotRow {
   id: string
   booking_id: string
   start_time: string
   end_time: string
   status: string
-  booking: {
-    id: string
-    customer_id: string
-    payment_method: string | null
-    status: string
-  } | null
 }
 
 interface InvoiceSession {
@@ -71,28 +65,44 @@ export async function POST(req: NextRequest) {
     Date.UTC(year, month, 0, 23, 59, 59, 999)
   ).toISOString()
 
-  const { data: slotRows, error: slotsErr } = await supabase
-    .from("booking_slots")
-    .select(
-      "id, booking_id, start_time, end_time, status, booking:bookings!inner(id, customer_id, payment_method, status)"
-    )
-    .eq("booking.customer_id", trainerId)
-    .eq("booking.payment_method", "trainer_account")
-    .in("booking.status", ["confirmed", "completed"])
-    .neq("status", "cancelled")
-    .gte("start_time", startOfMonth)
-    .lte("start_time", endOfMonth)
-    .order("start_time", { ascending: true })
+  // First find the trainer's invoiceable bookings (any creation date), then
+  // fetch slots within the target month for those bookings. Done in two
+  // steps because Supabase / PostgREST embedded-resource filters don't
+  // reliably narrow the parent rows in this client version.
+  const { data: trainerBookings, error: bookingsErr } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("customer_id", trainerId)
+    .eq("payment_method", "trainer_account")
+    .in("status", ["confirmed", "completed"])
 
-  if (slotsErr) {
-    return NextResponse.json({ error: slotsErr.message }, { status: 500 })
+  if (bookingsErr) {
+    return NextResponse.json({ error: bookingsErr.message }, { status: 500 })
+  }
+
+  const bookingIds = (trainerBookings ?? []).map((b) => b.id)
+
+  let slotRows: SlotRow[] = []
+  if (bookingIds.length > 0) {
+    const { data, error: slotsErr } = await supabase
+      .from("booking_slots")
+      .select("id, booking_id, start_time, end_time, status")
+      .in("booking_id", bookingIds)
+      .neq("status", "cancelled")
+      .gte("start_time", startOfMonth)
+      .lte("start_time", endOfMonth)
+      .order("start_time", { ascending: true })
+    if (slotsErr) {
+      return NextResponse.json({ error: slotsErr.message }, { status: 500 })
+    }
+    slotRows = (data ?? []) as SlotRow[]
   }
 
   // Merge consecutive slots within the same booking into sessions (matching
   // the access-code generator's algorithm). A 2-hour booking stored as 4 ×
   // 30-min slots becomes 1 session of 2 hours, not 4 line items of 0.5 hours.
-  const slotsByBooking = new Map<string, SlotWithBooking[]>()
-  for (const s of (slotRows ?? []) as unknown as SlotWithBooking[]) {
+  const slotsByBooking = new Map<string, SlotRow[]>()
+  for (const s of slotRows) {
     const list = slotsByBooking.get(s.booking_id) ?? []
     list.push(s)
     slotsByBooking.set(s.booking_id, list)
