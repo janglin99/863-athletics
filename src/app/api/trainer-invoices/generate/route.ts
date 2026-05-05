@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+interface SlotWithBooking {
+  id: string
+  booking_id: string
+  start_time: string
+  end_time: string
+  status: string
+  booking: {
+    id: string
+    customer_id: string
+    payment_method: string | null
+    status: string
+  } | null
+}
+
+interface InvoiceSession {
+  bookingId: string
+  start: string
+  end: string
+  hours: number
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const {
@@ -29,7 +50,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Get trainer profile
   const { data: trainer } = await supabase
     .from("profiles")
     .select("*")
@@ -40,111 +60,138 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Trainer not found" }, { status: 404 })
   }
 
-  // Find confirmed bookings for this trainer in the given month/year
-  const startOfMonth = new Date(year, month - 1, 1).toISOString()
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999).toISOString()
+  // Pull booking_slots whose start_time falls within the target month, joined
+  // to the trainer's confirmed/completed self-bookings (payment_method =
+  // trainer_account, customer_id = trainer). Filtering on the slot date is the
+  // key: a booking created in March with sessions in April should bill
+  // against April, and a recurring booking spanning multiple months should
+  // split across each month's invoice.
+  const startOfMonth = new Date(Date.UTC(year, month - 1, 1)).toISOString()
+  const endOfMonth = new Date(
+    Date.UTC(year, month, 0, 23, 59, 59, 999)
+  ).toISOString()
 
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("*, slots:booking_slots(*)")
-    .eq("customer_id", trainerId)
-    .eq("payment_method", "trainer_account")
-    .eq("status", "confirmed")
-    .gte("created_at", startOfMonth)
-    .lte("created_at", endOfMonth)
+  const { data: slotRows, error: slotsErr } = await supabase
+    .from("booking_slots")
+    .select(
+      "id, booking_id, start_time, end_time, status, booking:bookings!inner(id, customer_id, payment_method, status)"
+    )
+    .eq("booking.customer_id", trainerId)
+    .eq("booking.payment_method", "trainer_account")
+    .in("booking.status", ["confirmed", "completed"])
+    .neq("status", "cancelled")
+    .gte("start_time", startOfMonth)
+    .lte("start_time", endOfMonth)
+    .order("start_time", { ascending: true })
 
-  const bookingList = bookings || []
-  const totalSessions = bookingList.length
-
-  // Calculate total hours and build line items
-  let totalHours = 0
-  const lineItems: Array<{
-    booking_id: string
-    session_date: string
-    start_time: string
-    end_time: string
-    hours: number
-    rate_cents: number
-    amount_cents: number
-  }> = []
-
-  for (const booking of bookingList) {
-    const slots = booking.slots || []
-    for (const slot of slots) {
-      const start = new Date(slot.start_time)
-      const end = new Date(slot.end_time)
-      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60)
-      totalHours += hours
-
-      let rateCents = 0
-      let amountCents = 0
-
-      if (trainer.commission_type === "hourly") {
-        rateCents = (trainer.commission_rate || 0) * 100
-        amountCents = Math.round(rateCents * hours)
-      } else if (trainer.commission_type === "flat_per_session") {
-        rateCents = (trainer.commission_rate || 0) * 100
-        amountCents = rateCents
-      } else if (trainer.commission_type === "flat_monthly") {
-        rateCents = 0
-        amountCents = 0
-      } else {
-        // percentage — mark as manual
-        rateCents = 0
-        amountCents = 0
-      }
-
-      lineItems.push({
-        booking_id: booking.id,
-        session_date: slot.start_time,
-        start_time: slot.start_time,
-        end_time: slot.end_time,
-        hours: Math.round(hours * 100) / 100,
-        rate_cents: rateCents,
-        amount_cents: amountCents,
-      })
-    }
+  if (slotsErr) {
+    return NextResponse.json({ error: slotsErr.message }, { status: 500 })
   }
 
-  // Calculate total amount
+  // Merge consecutive slots within the same booking into sessions (matching
+  // the access-code generator's algorithm). A 2-hour booking stored as 4 ×
+  // 30-min slots becomes 1 session of 2 hours, not 4 line items of 0.5 hours.
+  const slotsByBooking = new Map<string, SlotWithBooking[]>()
+  for (const s of (slotRows ?? []) as unknown as SlotWithBooking[]) {
+    const list = slotsByBooking.get(s.booking_id) ?? []
+    list.push(s)
+    slotsByBooking.set(s.booking_id, list)
+  }
+
+  const sessions: InvoiceSession[] = []
+  for (const [bookingId, list] of slotsByBooking) {
+    list.sort(
+      (a, b) =>
+        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+    )
+    let cur = {
+      start: list[0].start_time,
+      end: list[0].end_time,
+    }
+    for (let i = 1; i < list.length; i++) {
+      const s = list[i]
+      if (new Date(s.start_time).getTime() === new Date(cur.end).getTime()) {
+        cur.end = s.end_time
+      } else {
+        const hours =
+          (new Date(cur.end).getTime() - new Date(cur.start).getTime()) /
+          3_600_000
+        sessions.push({ bookingId, ...cur, hours })
+        cur = { start: s.start_time, end: s.end_time }
+      }
+    }
+    const tailHours =
+      (new Date(cur.end).getTime() - new Date(cur.start).getTime()) /
+      3_600_000
+    sessions.push({ bookingId, ...cur, hours: tailHours })
+  }
+
+  // Build line items from sessions, applying commission rules.
+  const lineItems = sessions.map((s) => {
+    let rateCents = 0
+    let amountCents = 0
+    if (trainer.commission_type === "hourly") {
+      rateCents = (trainer.commission_rate || 0) * 100
+      amountCents = Math.round(rateCents * s.hours)
+    } else if (trainer.commission_type === "flat_per_session") {
+      rateCents = (trainer.commission_rate || 0) * 100
+      amountCents = rateCents
+    }
+    // flat_monthly and percentage leave per-line zero — totals filled below.
+    return {
+      booking_id: s.bookingId,
+      session_date: s.start,
+      start_time: s.start,
+      end_time: s.end,
+      hours: Math.round(s.hours * 100) / 100,
+      rate_cents: rateCents,
+      amount_cents: amountCents,
+    }
+  })
+
+  const totalSessions = sessions.length
+  const totalHours = Math.round(
+    sessions.reduce((sum, s) => sum + s.hours, 0) * 100
+  ) / 100
+
   let totalAmountCents = 0
   if (trainer.commission_type === "hourly") {
-    totalAmountCents = lineItems.reduce((sum, item) => sum + item.amount_cents, 0)
+    totalAmountCents = lineItems.reduce((s, i) => s + i.amount_cents, 0)
   } else if (trainer.commission_type === "flat_per_session") {
     totalAmountCents = (trainer.commission_rate || 0) * 100 * totalSessions
   } else if (trainer.commission_type === "flat_monthly") {
     totalAmountCents = (trainer.commission_rate || 0) * 100
   }
-  // percentage stays 0
+  // percentage stays 0 — admin sets manually.
 
-  // Upsert the invoice
-  const { data: existingInvoice } = await supabase
+  // Upsert the invoice row + replace line items.
+  const { data: existing } = await supabase
     .from("trainer_invoices")
     .select("id")
     .eq("trainer_id", trainerId)
     .eq("month", month)
     .eq("year", year)
-    .single()
+    .maybeSingle()
 
   let invoiceId: string
 
-  if (existingInvoice) {
-    invoiceId = existingInvoice.id
+  if (existing) {
+    invoiceId = existing.id
     const { error } = await supabase
       .from("trainer_invoices")
       .update({
         total_sessions: totalSessions,
-        total_hours: Math.round(totalHours * 100) / 100,
+        total_hours: totalHours,
         total_amount_cents: totalAmountCents,
         updated_at: new Date().toISOString(),
       })
       .eq("id", invoiceId)
-
     if (error) {
-      return NextResponse.json({ error: "Failed to update invoice" }, { status: 500 })
+      return NextResponse.json(
+        { error: "Failed to update invoice" },
+        { status: 500 }
+      )
     }
-
-    // Delete existing line items before re-creating
     await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId)
   } else {
     const { data: newInvoice, error } = await supabase
@@ -154,31 +201,29 @@ export async function POST(req: NextRequest) {
         month,
         year,
         total_sessions: totalSessions,
-        total_hours: Math.round(totalHours * 100) / 100,
+        total_hours: totalHours,
         total_amount_cents: totalAmountCents,
         status: "pending",
       })
       .select("id")
       .single()
-
     if (error || !newInvoice) {
-      return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 })
+      return NextResponse.json(
+        { error: error?.message || "Failed to create invoice" },
+        { status: 500 }
+      )
     }
-
     invoiceId = newInvoice.id
   }
 
-  // Insert line items
   if (lineItems.length > 0) {
     const itemsToInsert = lineItems.map((item) => ({
       invoice_id: invoiceId,
       ...item,
     }))
-
     const { error: itemsError } = await supabase
       .from("invoice_items")
       .insert(itemsToInsert)
-
     if (itemsError) {
       return NextResponse.json(
         { error: "Failed to create invoice items" },
@@ -187,7 +232,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fetch the final invoice with items
   const { data: invoice } = await supabase
     .from("trainer_invoices")
     .select("*, trainer:profiles!trainer_id(*), items:invoice_items(*)")
