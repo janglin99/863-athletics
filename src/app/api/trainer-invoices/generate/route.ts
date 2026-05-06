@@ -71,13 +71,44 @@ export async function POST(req: NextRequest) {
   // reliably narrow the parent rows in this client version.
   const { data: trainerBookings, error: bookingsErr } = await supabase
     .from("bookings")
-    .select("id")
+    .select(
+      "id, total_cents, slots:booking_slots(start_time, end_time, status)"
+    )
     .eq("customer_id", trainerId)
     .eq("payment_method", "trainer_account")
     .in("status", ["confirmed", "completed"])
 
   if (bookingsErr) {
     return NextResponse.json({ error: bookingsErr.message }, { status: 500 })
+  }
+
+  // Per-booking effective hourly rate, derived from total_cents / total_hours
+  // across the entire booking. This naturally reflects any retroactively-
+  // applied promo code (or override) so a booking discounted to $18/hr by
+  // GLAM bills at $18/hr instead of the trainer's profile commission_rate.
+  type BookingRow = {
+    id: string
+    total_cents: number | null
+    slots: { start_time: string; end_time: string; status: string }[] | null
+  }
+  const fallbackHourlyCents = (trainer.commission_rate || 0) * 100
+  const effectiveHourlyByBooking = new Map<string, number>()
+  for (const b of (trainerBookings ?? []) as BookingRow[]) {
+    const totalMs = (b.slots ?? [])
+      .filter((s) => s.status !== "cancelled")
+      .reduce(
+        (ms, s) =>
+          ms +
+          (new Date(s.end_time).getTime() -
+            new Date(s.start_time).getTime()),
+        0
+      )
+    const totalHours = totalMs / 3_600_000
+    if (totalHours > 0 && (b.total_cents ?? 0) > 0) {
+      effectiveHourlyByBooking.set(b.id, (b.total_cents ?? 0) / totalHours)
+    } else {
+      effectiveHourlyByBooking.set(b.id, fallbackHourlyCents)
+    }
   }
 
   const bookingIds = (trainerBookings ?? []).map((b) => b.id)
@@ -141,8 +172,10 @@ export async function POST(req: NextRequest) {
     let rateCents = 0
     let amountCents = 0
     if (trainer.commission_type === "hourly") {
-      rateCents = (trainer.commission_rate || 0) * 100
-      amountCents = Math.round(rateCents * s.hours)
+      const perHour =
+        effectiveHourlyByBooking.get(s.bookingId) ?? fallbackHourlyCents
+      rateCents = Math.round(perHour)
+      amountCents = Math.round(perHour * s.hours)
     } else if (trainer.commission_type === "flat_per_session") {
       rateCents = (trainer.commission_rate || 0) * 100
       amountCents = rateCents
