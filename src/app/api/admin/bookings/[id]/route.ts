@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { validatePromoCode } from "@/lib/promo-codes/validate"
+import { generateAccessCodes } from "@/lib/access-codes/generate"
 import { z } from "zod"
 
 const BOOKING_STATUSES = [
@@ -80,6 +82,18 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.errors }, { status: 400 })
   }
   const data = parsed.data
+
+  // Capture the previous status so we can detect a flip to 'confirmed' and
+  // trigger access-code generation, matching the other confirmation paths.
+  let previousStatus: string | null = null
+  if (data.status !== undefined) {
+    const { data: prev } = await auth.supabase
+      .from("bookings")
+      .select("status")
+      .eq("id", id)
+      .single()
+    previousStatus = prev?.status ?? null
+  }
 
   const update: Record<string, unknown> = {}
   if (data.notes !== undefined) update.notes = data.notes
@@ -192,6 +206,13 @@ export async function PATCH(
       .from("promo_codes")
       .update({ usage_count: promoToRedeem.usage_count + 1 })
       .eq("id", promoToRedeem.id)
+  }
+
+  // If the admin flipped the booking into confirmed via this PATCH, fire
+  // access-code generation after the response. generateAccessCodes is
+  // idempotent so re-firing on an already-confirmed booking is a no-op.
+  if (data.status === "confirmed" && previousStatus !== "confirmed") {
+    after(() => generateAccessCodes(id))
   }
 
   if (data.slots && data.slots.length > 0) {
