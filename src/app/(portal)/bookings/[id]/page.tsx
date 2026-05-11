@@ -27,7 +27,9 @@ import {
   XCircle,
   Copy,
   RefreshCw,
+  Loader2,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { RescheduleModal } from "@/components/bookings/RescheduleModal"
 import type { Booking } from "@/types"
 
@@ -198,30 +200,60 @@ export default function BookingDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {booking.access_codes.map((code) => (
-              <div
-                key={code.id}
-                className="bg-bg-elevated rounded-lg p-4 text-center"
-              >
-                <p className="text-xs text-text-muted mb-2">
-                  Your keybox PIN
-                </p>
-                <div className="flex items-center justify-center gap-3">
-                  <span className="text-4xl font-mono font-bold tracking-[0.3em] text-success">
-                    {code.pin_code}
-                  </span>
-                  <button
-                    onClick={() => copyCode(code.pin_code)}
-                    className="text-text-muted hover:text-text-primary"
-                  >
-                    <Copy className="h-5 w-5" />
-                  </button>
+            {booking.access_codes.map((code) => {
+              const isReady = /^\d+$/.test(code.pin_code)
+              const isGenerating = code.pin_code === "GENERATING"
+              return (
+                <div
+                  key={code.id}
+                  className="bg-bg-elevated rounded-lg p-4 text-center"
+                >
+                  <p className="text-xs text-text-muted mb-2">
+                    Your keybox PIN
+                  </p>
+                  {isReady ? (
+                    <>
+                      <div className="flex items-center justify-center gap-3 flex-wrap">
+                        <span className="text-3xl sm:text-4xl font-mono font-bold tracking-[0.2em] sm:tracking-[0.3em] text-success break-all">
+                          {code.pin_code}
+                        </span>
+                        <button
+                          onClick={() => copyCode(code.pin_code)}
+                          className="text-text-muted hover:text-text-primary shrink-0"
+                          aria-label="Copy PIN"
+                        >
+                          <Copy className="h-5 w-5" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-text-muted mt-2">
+                        Valid for your session time only. Do not share.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold font-mono uppercase tracking-wider",
+                          isGenerating
+                            ? "bg-warning/10 text-warning border border-warning/30"
+                            : "bg-error/10 text-error border border-error/30"
+                        )}
+                      >
+                        {isGenerating && (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        )}
+                        {code.pin_code}
+                      </span>
+                      <p className="text-xs text-text-muted mt-2">
+                        {isGenerating
+                          ? "Your PIN is being prepared and will appear here once ready."
+                          : "Contact 863 Athletics — your PIN needs to be issued manually."}
+                      </p>
+                    </>
+                  )}
                 </div>
-                <p className="text-xs text-text-muted mt-2">
-                  Valid for your session time only. Do not share.
-                </p>
-              </div>
-            ))}
+              )
+            })}
           </CardContent>
         </Card>
       )}
