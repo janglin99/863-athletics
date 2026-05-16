@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import Stripe from "stripe"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
@@ -28,8 +29,12 @@ export async function POST(
     if (!booking)
       return NextResponse.json({ error: "Booking not found" }, { status: 404 })
 
-    // Already confirmed
+    // Already confirmed — usually the Stripe webhook beat the browser here.
+    // Still fire generateAccessCodes in case the webhook flipped status but
+    // hit a timeout / transient Seam error before codes were created. The
+    // function is idempotent, so this is a no-op when codes already exist.
     if (booking.status === "confirmed") {
+      after(() => generateAccessCodes(id))
       return NextResponse.json({ booking })
     }
 
@@ -76,8 +81,10 @@ export async function POST(
       })
       .eq("id", payment.id)
 
-    // Generate access codes directly (uses admin client internally)
-    await generateAccessCodes(id)
+    // Schedule code generation after the response — Seam calls can exceed
+    // the function timeout for multi-session bookings, which would leave
+    // the booking confirmed but without codes.
+    after(() => generateAccessCodes(id))
 
     return NextResponse.json({ confirmed: true })
   } catch (error: any) {

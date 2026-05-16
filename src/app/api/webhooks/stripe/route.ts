@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import Stripe from "stripe"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
@@ -56,10 +57,15 @@ export async function POST(req: NextRequest) {
         })
         .in("id", bookingIds)
 
-      // Generate access codes for each confirmed booking
-      for (const id of bookingIds) {
-        await generateAccessCodes(id)
-      }
+      // Schedule access-code generation after the webhook ACK. Awaiting Seam
+      // here could push the response past Vercel's function timeout on a
+      // multi-booking cart, which previously left bookings stuck on confirmed
+      // with no codes generated. generateAccessCodes is idempotent.
+      after(async () => {
+        for (const id of bookingIds) {
+          await generateAccessCodes(id)
+        }
+      })
     }
   }
 
