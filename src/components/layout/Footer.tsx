@@ -45,6 +45,7 @@ export function Footer() {
                 { href: "/about", label: "About Us" },
                 { href: "/contact", label: "Contact" },
                 { href: "/waiver", label: "Liability Waiver" },
+                { href: "/subscribe", label: "Subscribe" },
               ].map((link) => (
                 <Link
                   key={link.href}
