@@ -230,15 +230,32 @@ export default function PaymentsPage() {
                         >
                           {PERIOD_TYPE_LABELS[invoice.period_type]}
                         </Badge>
+                        <Badge
+                          variant="outline"
+                          className={
+                            invoice.status === "closed"
+                              ? "bg-success/10 text-success border-success/30"
+                              : "bg-warning/10 text-warning border-warning/30"
+                          }
+                        >
+                          {invoice.status === "closed" ? "Closed" : "Open"}
+                        </Badge>
                       </div>
                       <p className="text-xs text-text-muted mt-1">
                         {formatInvoicePeriod(invoice)}
                       </p>
                     </div>
                     <div className="text-right shrink-0 flex items-center gap-3">
-                      <span className="font-display font-bold text-brand-orange">
-                        {formatCents(invoice.total_cents)}
-                      </span>
+                      <div className="text-right">
+                        <span className="font-display font-bold text-brand-orange block">
+                          {formatCents(invoice.total_cents)}
+                        </span>
+                        {invoice.total_cents > invoice.paid_cents && (
+                          <span className="text-xs text-warning">
+                            {formatCents(invoice.total_cents - invoice.paid_cents)} due
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() =>

@@ -26,8 +26,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { BookingStatusBadge } from "@/components/booking/BookingStatusBadge"
+import { CustomerInvoiceList } from "@/components/admin/CustomerInvoiceList"
 import { formatCents, formatDateTime, formatPhone } from "@/lib/utils/format"
-import { formatInvoicePeriod, PERIOD_TYPE_LABELS } from "@/lib/utils/invoice"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
@@ -44,9 +44,6 @@ import {
   DollarSign,
   Clock,
   Ticket,
-  FileText,
-  Eye,
-  Download,
 } from "lucide-react"
 import type { Profile, Booking, UserCredit, CustomerInvoice } from "@/types"
 
@@ -96,8 +93,6 @@ export default function AdminCustomerDetailPage() {
   )
   const [invoiceBookingId, setInvoiceBookingId] = useState<string>("")
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
-  const [deleteInvoiceTarget, setDeleteInvoiceTarget] =
-    useState<CustomerInvoice | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -193,23 +188,6 @@ export default function AdminCustomerDetailPage() {
       toast.error(data.error || "Failed to generate invoice")
     }
     setGeneratingInvoice(false)
-  }
-
-  const handleDeleteInvoice = async () => {
-    if (!deleteInvoiceTarget) return
-    const res = await fetch("/api/customer-invoices", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceId: deleteInvoiceTarget.id }),
-    })
-    if (res.ok) {
-      toast.success("Invoice deleted")
-      setDeleteInvoiceTarget(null)
-      await loadInvoices()
-    } else {
-      const data = await res.json()
-      toast.error(data.error || "Failed to delete invoice")
-    }
   }
 
   const handleAddCredit = async () => {
@@ -931,87 +909,13 @@ export default function AdminCustomerDetailPage() {
           </Dialog>
         </CardHeader>
         <CardContent>
-          {invoices.length === 0 ? (
-            <p className="text-sm text-text-muted">No saved invoices</p>
-          ) : (
-            <div className="space-y-3">
-              {invoices.map((invoice) => (
-                <div
-                  key={invoice.id}
-                  className="bg-bg-elevated rounded-lg border border-border p-4 flex items-start justify-between"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="bg-text-secondary/10 text-text-secondary border-text-secondary/30">
-                        <FileText className="h-3 w-3 mr-1" />
-                        {invoice.invoice_number}
-                      </Badge>
-                      <span className="text-xs text-text-muted">
-                        {PERIOD_TYPE_LABELS[invoice.period_type]}
-                      </span>
-                    </div>
-                    <p className="text-sm font-semibold">
-                      {formatInvoicePeriod(invoice)}
-                    </p>
-                    <p className="text-xs text-text-secondary">
-                      {formatCents(invoice.total_cents)} total
-                      {invoice.paid_cents < invoice.total_cents &&
-                        ` · ${formatCents(invoice.total_cents - invoice.paid_cents)} due`}
-                    </p>
-                    <p className="text-xs text-text-muted">
-                      Generated {formatDateTime(invoice.created_at)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-text-secondary h-8 w-8 p-0"
-                      onClick={() =>
-                        window.open(`/api/customer-invoices/${invoice.id}/pdf`, "_blank")
-                      }
-                      title="View / Print"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-text-secondary h-8 w-8 p-0"
-                      onClick={() =>
-                        window.open(`/api/customer-invoices/${invoice.id}/pdf?download=1`, "_blank")
-                      }
-                      title="Download"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-error h-8 w-8 p-0"
-                      onClick={() => setDeleteInvoiceTarget(invoice)}
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <CustomerInvoiceList
+            invoices={invoices}
+            onChanged={loadInvoices}
+            emptyMessage="No saved invoices"
+          />
         </CardContent>
       </Card>
-
-      {/* Delete Invoice Confirm */}
-      <ConfirmDialog
-        open={!!deleteInvoiceTarget}
-        onOpenChange={(open) => !open && setDeleteInvoiceTarget(null)}
-        title="Delete Invoice"
-        description={`This will permanently delete invoice ${deleteInvoiceTarget?.invoice_number}. This action cannot be undone.`}
-        confirmLabel="Delete"
-        onConfirm={handleDeleteInvoice}
-        variant="destructive"
-      />
     </div>
   )
 }

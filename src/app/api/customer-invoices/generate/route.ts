@@ -8,15 +8,19 @@ import {
   endOfMonth,
 } from "date-fns"
 import { createClient } from "@/lib/supabase/server"
+import { recomputeInvoicePaidCents } from "@/lib/invoices/recompute"
+
+const BOOKING_SELECT =
+  "id, total_cents, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status), payments(amount_cents, status)"
 
 interface BookingRow {
   id: string
   total_cents: number
-  payment_status: string
   participant_count: number
   created_at: string
   rate: { name: string } | { name: string }[] | null
   slots: { start_time: string; end_time: string; status: string }[] | null
+  payments: { amount_cents: number; status: string }[] | null
 }
 
 function rateName(rate: BookingRow["rate"]): string {
@@ -31,6 +35,22 @@ function earliestSlotStart(booking: BookingRow): string {
   return active.reduce((earliest, s) =>
     new Date(s.start_time) < new Date(earliest.start_time) ? s : earliest
   ).start_time
+}
+
+// bookings.payment_status is not trustworthy — it's set to 'paid' at booking
+// time for account-billed bookings (e.g. trainer_account) even though no
+// money has changed hands. The real completed payments table is ground truth.
+function realPaidCents(booking: BookingRow): number {
+  return (booking.payments ?? [])
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + p.amount_cents, 0)
+}
+
+function lineItemStatus(booking: BookingRow): "paid" | "partial" | "unpaid" {
+  const paid = realPaidCents(booking)
+  if (paid <= 0) return "unpaid"
+  if (paid >= booking.total_cents) return "paid"
+  return "partial"
 }
 
 export async function POST(req: NextRequest) {
@@ -87,9 +107,7 @@ export async function POST(req: NextRequest) {
     }
     const { data: booking, error } = await supabase
       .from("bookings")
-      .select(
-        "id, total_cents, payment_status, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status)"
-      )
+      .select(BOOKING_SELECT)
       .eq("id", bookingId)
       .eq("customer_id", customerId)
       .single()
@@ -126,9 +144,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from("bookings")
-      .select(
-        "id, total_cents, payment_status, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status)"
-      )
+      .select(BOOKING_SELECT)
       .eq("customer_id", customerId)
       .neq("status", "cancelled")
 
@@ -147,14 +163,11 @@ export async function POST(req: NextRequest) {
     description:
       rateName(b.rate) + (b.participant_count > 1 ? ` (×${b.participant_count})` : ""),
     session_date: earliestSlotStart(b),
-    payment_status: b.payment_status,
+    payment_status: lineItemStatus(b),
     amount_cents: b.total_cents,
   }))
 
   const totalCents = lineItems.reduce((sum, i) => sum + i.amount_cents, 0)
-  const paidCents = lineItems
-    .filter((i) => i.payment_status === "paid")
-    .reduce((sum, i) => sum + i.amount_cents, 0)
 
   const periodStartIso = periodStart.toISOString()
   const periodEndIso = periodEnd.toISOString()
@@ -176,7 +189,6 @@ export async function POST(req: NextRequest) {
       .from("customer_invoices")
       .update({
         total_cents: totalCents,
-        paid_cents: paidCents,
         generated_by: user.id,
       })
       .eq("id", invoiceId)
@@ -199,7 +211,6 @@ export async function POST(req: NextRequest) {
         period_start: periodStartIso,
         period_end: periodEndIso,
         total_cents: totalCents,
-        paid_cents: paidCents,
         generated_by: user.id,
       })
       .select("id")
@@ -225,9 +236,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  await recomputeInvoicePaidCents(supabase, invoiceId)
+
   const { data: invoice } = await supabase
     .from("customer_invoices")
-    .select("*, customer:profiles!customer_id(*), items:customer_invoice_items(*)")
+    .select(
+      "*, customer:profiles!customer_id(*), items:customer_invoice_items(*), payments:customer_invoice_payments(*)"
+    )
     .eq("id", invoiceId)
     .single()
 

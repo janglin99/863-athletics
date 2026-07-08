@@ -155,6 +155,33 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     color: BRAND_ORANGE,
   },
+  statusStamp: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 0.5,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 3,
+  },
+  paymentsSection: {
+    marginBottom: 20,
+  },
+  paymentsSectionLabel: {
+    fontSize: 8,
+    color: TEXT_MUTED,
+    letterSpacing: 0.5,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 6,
+  },
+  paymentRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  paymentText: {
+    fontSize: 8.5,
+    color: TEXT_SECONDARY,
+  },
   footer: {
     position: "absolute",
     bottom: 40,
@@ -201,7 +228,9 @@ export function CustomerInvoiceDocument({
   customer,
 }: CustomerInvoiceDocumentProps) {
   const items = invoice.items ?? []
+  const payments = invoice.payments ?? []
   const balanceDueCents = invoice.total_cents - invoice.paid_cents
+  const isClosed = invoice.status === "closed"
 
   return (
     <Document title={`Invoice ${invoice.invoice_number}`}>
@@ -221,7 +250,8 @@ export function CustomerInvoiceDocument({
           <View style={styles.brandBlock}>
             <Text style={styles.brandName}>{FACILITY.name.toUpperCase()}</Text>
             <Text style={styles.brandLine}>{FACILITY.tagline}</Text>
-            <Text style={styles.brandLine}>{FACILITY.addressLine}</Text>
+            <Text style={styles.brandLine}>{FACILITY.addressLine1}</Text>
+            <Text style={styles.brandLine}>{FACILITY.addressLine2}</Text>
             <Text style={styles.brandLine}>{FACILITY.phone}</Text>
             <Text style={styles.brandLine}>{FACILITY.email}</Text>
           </View>
@@ -243,6 +273,19 @@ export function CustomerInvoiceDocument({
             <Text style={styles.metaLabel}>PERIOD</Text>
             <Text style={styles.metaValue}>
               {formatInvoicePeriod(invoice)}
+            </Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>STATUS</Text>
+            <Text
+              style={[
+                styles.statusStamp,
+                isClosed
+                  ? { color: "#15803D", backgroundColor: "#DCFCE7" }
+                  : { color: BRAND_ORANGE, backgroundColor: "#FFEDE3" },
+              ]}
+            >
+              {isClosed ? "PAID IN FULL" : "BALANCE DUE"}
             </Text>
           </View>
         </View>
@@ -304,13 +347,30 @@ export function CustomerInvoiceDocument({
           </View>
         </View>
 
+        {payments.length > 0 && (
+          <View style={styles.paymentsSection}>
+            <Text style={styles.paymentsSectionLabel}>PAYMENTS RECEIVED</Text>
+            {payments.map((p) => (
+              <View key={p.id} style={styles.paymentRow}>
+                <Text style={styles.paymentText}>
+                  {formatDate(p.paid_at)} · {p.method.replace(/_/g, " ")}
+                  {p.note ? ` · ${p.note}` : ""}
+                </Text>
+                <Text style={styles.paymentText}>
+                  {formatCents(p.amount_cents)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.footer} fixed>
           <Text style={styles.footerThanks}>
             Thank you for training with {FACILITY.name}.
           </Text>
           <Text style={styles.footerLine}>
-            {FACILITY.name} · {FACILITY.addressLine} · {FACILITY.phone} ·{" "}
-            {FACILITY.website}
+            {FACILITY.name} · {FACILITY.addressLine1}, {FACILITY.addressLine2} ·{" "}
+            {FACILITY.phone} · {FACILITY.website}
           </Text>
         </View>
       </Page>

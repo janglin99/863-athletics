@@ -65,11 +65,13 @@ export interface CustomerInvoice {
   period_end: string
   total_cents: number
   paid_cents: number
+  status: "open" | "closed"
   notes: string | null
   generated_by: string | null
   created_at: string
   customer?: Profile
   items?: CustomerInvoiceItem[]
+  payments?: CustomerInvoicePayment[]
 }
 
 export interface CustomerInvoiceItem {
@@ -80,6 +82,17 @@ export interface CustomerInvoiceItem {
   session_date: string
   payment_status: string
   amount_cents: number
+  created_at: string
+}
+
+export interface CustomerInvoicePayment {
+  id: string
+  invoice_id: string
+  amount_cents: number
+  method: "cash" | "check" | "zelle" | "cash_app" | "card" | "other"
+  note: string | null
+  recorded_by: string | null
+  paid_at: string
   created_at: string
 }
 

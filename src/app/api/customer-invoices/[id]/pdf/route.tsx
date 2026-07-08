@@ -30,7 +30,7 @@ export async function GET(
   const { data: invoice, error } = await supabase
     .from("customer_invoices")
     .select(
-      "*, customer:profiles!customer_id(*), items:customer_invoice_items(*)"
+      "*, customer:profiles!customer_id(*), items:customer_invoice_items(*), payments:customer_invoice_payments(*)"
     )
     .eq("id", id)
     .single()

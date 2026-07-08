@@ -3,10 +3,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { PageHeader } from "@/components/shared/PageHeader"
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
-import { Card, CardContent } from "@/components/ui/card"
+import { CustomerInvoiceList } from "@/components/admin/CustomerInvoiceList"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -31,19 +29,9 @@ import {
   CommandEmpty,
   CommandItem,
 } from "@/components/ui/command"
-import { formatCents, formatDateTime } from "@/lib/utils/format"
-import { formatInvoicePeriod, PERIOD_TYPE_LABELS } from "@/lib/utils/invoice"
+import { formatDateTime } from "@/lib/utils/format"
 import { toast } from "sonner"
-import {
-  Plus,
-  Loader2,
-  Search,
-  FileText,
-  Eye,
-  Download,
-  Trash2,
-  ChevronDown,
-} from "lucide-react"
+import { Plus, Loader2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Profile, Booking, CustomerInvoice } from "@/types"
 
@@ -56,7 +44,6 @@ export default function AdminCustomerInvoicesPage() {
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [deleteTarget, setDeleteTarget] = useState<CustomerInvoice | null>(null)
 
   // Generate dialog state
   const [generateOpen, setGenerateOpen] = useState(false)
@@ -99,6 +86,7 @@ export default function AdminCustomerInvoicesPage() {
       const { data } = await supabase
         .from("profiles")
         .select("id, first_name, last_name, email, phone, role")
+        .eq("role", "customer")
         .order("first_name", { ascending: true })
         .limit(500)
       setCustomers((data as Profile[]) || [])
@@ -181,23 +169,6 @@ export default function AdminCustomerInvoicesPage() {
       toast.error(data.error || "Failed to generate invoice")
     }
     setGenerating(false)
-  }
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return
-    const res = await fetch("/api/customer-invoices", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceId: deleteTarget.id }),
-    })
-    if (res.ok) {
-      toast.success("Invoice deleted")
-      setDeleteTarget(null)
-      await loadInvoices()
-    } else {
-      const data = await res.json()
-      toast.error(data.error || "Failed to delete invoice")
-    }
   }
 
   const filteredInvoices = invoices.filter((inv) => {
@@ -419,115 +390,18 @@ export default function AdminCustomerInvoicesPage() {
             <Skeleton key={i} className="h-20 bg-bg-elevated rounded-lg" />
           ))}
         </div>
-      ) : filteredInvoices.length === 0 ? (
-        <Card className="bg-bg-secondary border-border">
-          <CardContent className="py-8 text-center">
-            <FileText className="h-8 w-8 text-text-muted mx-auto mb-2" />
-            <p className="text-text-secondary text-sm">
-              {invoices.length === 0
-                ? 'No invoices yet. Click "Generate Invoice" to create one.'
-                : "No invoices match your search."}
-            </p>
-          </CardContent>
-        </Card>
       ) : (
-        <div className="space-y-3">
-          {filteredInvoices.map((invoice) => (
-            <Card key={invoice.id} className="bg-bg-secondary border-border">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold truncate">
-                        {invoice.customer
-                          ? `${invoice.customer.first_name} ${invoice.customer.last_name}`
-                          : "Unknown customer"}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className="bg-text-secondary/10 text-text-secondary border-text-secondary/30"
-                      >
-                        {invoice.invoice_number}
-                      </Badge>
-                      <span className="text-xs text-text-muted">
-                        {PERIOD_TYPE_LABELS[invoice.period_type]}
-                      </span>
-                    </div>
-                    <p className="text-xs text-text-muted truncate">
-                      {invoice.customer?.email}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="hidden sm:block text-right">
-                      <p className="text-sm font-semibold">
-                        {formatInvoicePeriod(invoice)}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        {formatCents(invoice.total_cents)}
-                        {invoice.paid_cents < invoice.total_cents &&
-                          ` · ${formatCents(invoice.total_cents - invoice.paid_cents)} due`}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-text-secondary h-8 w-8 p-0"
-                        onClick={() =>
-                          window.open(`/api/customer-invoices/${invoice.id}/pdf`, "_blank")
-                        }
-                        title="View / Print"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-text-secondary h-8 w-8 p-0"
-                        onClick={() =>
-                          window.open(`/api/customer-invoices/${invoice.id}/pdf?download=1`, "_blank")
-                        }
-                        title="Download"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-error h-8 w-8 p-0"
-                        onClick={() => setDeleteTarget(invoice)}
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mobile stats */}
-                <div className="sm:hidden flex items-center gap-3 mt-3 text-sm">
-                  <span>{formatInvoicePeriod(invoice)}</span>
-                  <span className="text-brand-orange font-bold">
-                    {formatCents(invoice.total_cents)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <CustomerInvoiceList
+          invoices={filteredInvoices}
+          onChanged={loadInvoices}
+          showCustomer
+          emptyMessage={
+            invoices.length === 0
+              ? 'No invoices yet. Click "Generate Invoice" to create one.'
+              : "No invoices match your search."
+          }
+        />
       )}
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Invoice"
-        description={`This will permanently delete invoice ${deleteTarget?.invoice_number}. This action cannot be undone.`}
-        confirmLabel="Delete"
-        onConfirm={handleDelete}
-        variant="destructive"
-      />
     </div>
   )
 }
