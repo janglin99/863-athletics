@@ -40,6 +40,8 @@ import {
   Trash2,
   Loader2,
   FileText,
+  Send,
+  EyeOff,
 } from "lucide-react"
 import type { CustomerInvoice } from "@/types"
 
@@ -143,6 +145,25 @@ export function CustomerInvoiceList({
     }
   }
 
+  const togglePublish = async (invoice: CustomerInvoice) => {
+    const nextPublished = !invoice.published_at
+    const res = await fetch("/api/customer-invoices", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceId: invoice.id, published: nextPublished }),
+    })
+    if (res.ok) {
+      toast.success(
+        nextPublished
+          ? "Published to customer portal"
+          : "Unpublished — hidden from customer portal"
+      )
+      onChanged()
+    } else {
+      toast.error("Failed to update")
+    }
+  }
+
   const handleDelete = async () => {
     if (!deleteTarget) return
     const res = await fetch("/api/customer-invoices", {
@@ -210,6 +231,16 @@ export function CustomerInvoiceList({
                       >
                         {invoice.status === "closed" ? "Closed" : "Open"}
                       </Badge>
+                      <Badge
+                        variant="outline"
+                        className={
+                          invoice.published_at
+                            ? "bg-brand-steel/10 text-brand-steel border-brand-steel/30"
+                            : "bg-text-muted/10 text-text-muted border-text-muted/30"
+                        }
+                      >
+                        {invoice.published_at ? "Published" : "Draft"}
+                      </Badge>
                     </div>
                     {showCustomer && (
                       <p className="text-xs text-text-muted truncate">
@@ -261,6 +292,22 @@ export function CustomerInvoiceList({
                           Download
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => togglePublish(invoice)}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          {invoice.published_at ? (
+                            <>
+                              <EyeOff className="h-4 w-4" />
+                              Unpublish
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4" />
+                              Publish to Portal
+                            </>
+                          )}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
                             setPaymentTarget(invoice)

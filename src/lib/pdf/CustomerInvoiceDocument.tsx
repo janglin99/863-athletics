@@ -253,7 +253,7 @@ export function CustomerInvoiceDocument({
             <Text style={styles.brandLine}>{FACILITY.addressLine1}</Text>
             <Text style={styles.brandLine}>{FACILITY.addressLine2}</Text>
             <Text style={styles.brandLine}>{FACILITY.phone}</Text>
-            <Text style={styles.brandLine}>{FACILITY.email}</Text>
+            <Text style={styles.brandLine}>{FACILITY.website}</Text>
           </View>
         </View>
 

@@ -60,7 +60,7 @@ export interface CustomerInvoice {
   id: string
   invoice_number: string
   customer_id: string
-  period_type: "session" | "day" | "week" | "month"
+  period_type: "session" | "day" | "week" | "month" | "custom"
   period_start: string
   period_end: string
   total_cents: number
@@ -68,6 +68,8 @@ export interface CustomerInvoice {
   status: "open" | "closed"
   notes: string | null
   generated_by: string | null
+  published_at: string | null
+  viewed_at: string | null
   created_at: string
   customer?: Profile
   items?: CustomerInvoiceItem[]

@@ -66,17 +66,27 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { invoiceId, status } = await req.json()
-  if (!invoiceId || !["open", "closed"].includes(status)) {
+  const { invoiceId, status, published } = await req.json()
+  if (!invoiceId || (status === undefined && published === undefined)) {
     return NextResponse.json(
-      { error: "invoiceId and a valid status are required" },
+      { error: "invoiceId and a status or published change are required" },
       { status: 400 }
     )
+  }
+  if (status !== undefined && !["open", "closed"].includes(status)) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 })
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (status !== undefined) updates.status = status
+  if (published !== undefined) {
+    updates.published_at = published ? new Date().toISOString() : null
+    if (!published) updates.viewed_at = null
   }
 
   const { error } = await supabase
     .from("customer_invoices")
-    .update({ status })
+    .update(updates)
     .eq("id", invoiceId)
 
   if (error) {

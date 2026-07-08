@@ -40,7 +40,7 @@ export async function GET(
   }
 
   const isAdmin = ["admin", "staff"].includes(profile.role)
-  if (!isAdmin && invoice.customer_id !== user.id) {
+  if (!isAdmin && (invoice.customer_id !== user.id || !invoice.published_at)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

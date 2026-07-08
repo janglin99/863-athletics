@@ -20,13 +20,16 @@ import {
   ArrowRight,
   DollarSign,
   Ticket,
+  FileText,
+  X,
 } from "lucide-react"
-import type { Booking, Profile, UserCredit } from "@/types"
+import type { Booking, CustomerInvoice, Profile, UserCredit } from "@/types"
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [upcoming, setUpcoming] = useState<Booking[]>([])
   const [credits, setCredits] = useState<UserCredit[]>([])
+  const [newInvoices, setNewInvoices] = useState<CustomerInvoice[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -37,7 +40,7 @@ export default function DashboardPage() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const [{ data: profileData }, { data: bookingsData }] =
+      const [{ data: profileData }, { data: bookingsData }, { data: invoicesData }] =
         await Promise.all([
           supabase.from("profiles").select("*").eq("id", user.id).single(),
           supabase
@@ -47,10 +50,17 @@ export default function DashboardPage() {
             .in("status", ["confirmed", "pending_payment"])
             .order("created_at", { ascending: false })
             .limit(5),
+          supabase
+            .from("customer_invoices")
+            .select("*")
+            .eq("customer_id", user.id)
+            .not("published_at", "is", null)
+            .is("viewed_at", null),
         ])
 
       setProfile(profileData)
       setUpcoming(bookingsData || [])
+      setNewInvoices(invoicesData || [])
 
       // Load credits
       const creditsRes = await fetch("/api/credits")
@@ -61,6 +71,11 @@ export default function DashboardPage() {
     }
     load()
   }, [])
+
+  const acknowledgeNewInvoices = async () => {
+    setNewInvoices([])
+    await fetch("/api/customer-invoices/mark-viewed", { method: "POST" })
+  }
 
   if (loading) {
     return (
@@ -90,6 +105,40 @@ export default function DashboardPage() {
           </Link>
         }
       />
+
+      {newInvoices.length > 0 && (
+        <Card className="bg-brand-orange/10 border-brand-orange/30 mb-8">
+          <CardContent className="py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-md bg-brand-orange/20 p-2.5 shrink-0">
+                <FileText className="h-5 w-5 text-brand-orange" />
+              </div>
+              <p className="text-sm font-medium">
+                You have {newInvoices.length} new{" "}
+                {newInvoices.length === 1 ? "invoice" : "invoices"} to view
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link href="/payments" onClick={acknowledgeNewInvoices}>
+                <Button
+                  size="sm"
+                  className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
+                >
+                  View Invoices
+                </Button>
+              </Link>
+              <button
+                type="button"
+                onClick={acknowledgeNewInvoices}
+                className="p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+                title="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick stats */}
       <div className="grid gap-4 sm:grid-cols-3 mb-8">

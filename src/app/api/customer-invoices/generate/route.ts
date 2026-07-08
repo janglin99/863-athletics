@@ -72,7 +72,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { customerId, periodType, referenceDate, bookingId } = await req.json()
+  const {
+    customerId,
+    periodType,
+    referenceDate,
+    bookingId,
+    startDate,
+    endDate,
+    publish,
+  } = await req.json()
 
   if (!customerId || !periodType) {
     return NextResponse.json(
@@ -80,8 +88,22 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
-  if (!["session", "day", "week", "month"].includes(periodType)) {
+  if (!["session", "day", "week", "month", "custom"].includes(periodType)) {
     return NextResponse.json({ error: "Invalid periodType" }, { status: 400 })
+  }
+  if (periodType === "custom") {
+    if (!startDate || !endDate) {
+      return NextResponse.json(
+        { error: "startDate and endDate are required for custom invoices" },
+        { status: 400 }
+      )
+    }
+    if (new Date(startDate) > new Date(endDate)) {
+      return NextResponse.json(
+        { error: "startDate must be on or before endDate" },
+        { status: 400 }
+      )
+    }
   }
 
   const { data: customer } = await supabase
@@ -137,6 +159,9 @@ export async function POST(req: NextRequest) {
     } else if (periodType === "week") {
       periodStart = startOfWeek(ref, { weekStartsOn: 1 })
       periodEnd = endOfWeek(ref, { weekStartsOn: 1 })
+    } else if (periodType === "custom") {
+      periodStart = startOfDay(new Date(startDate))
+      periodEnd = endOfDay(new Date(endDate))
     } else {
       periodStart = startOfMonth(ref)
       periodEnd = endOfMonth(ref)
@@ -185,12 +210,25 @@ export async function POST(req: NextRequest) {
 
   if (existing) {
     invoiceId = existing.id
+    const updates: Record<string, unknown> = {
+      total_cents: totalCents,
+      generated_by: user.id,
+    }
+    // Regenerating never un-publishes an invoice — only explicitly
+    // requesting publish can move it from draft to published.
+    if (publish) {
+      const { data: existingInvoice } = await supabase
+        .from("customer_invoices")
+        .select("published_at")
+        .eq("id", invoiceId)
+        .single()
+      if (!existingInvoice?.published_at) {
+        updates.published_at = new Date().toISOString()
+      }
+    }
     const { error } = await supabase
       .from("customer_invoices")
-      .update({
-        total_cents: totalCents,
-        generated_by: user.id,
-      })
+      .update(updates)
       .eq("id", invoiceId)
     if (error) {
       return NextResponse.json(
@@ -212,6 +250,7 @@ export async function POST(req: NextRequest) {
         period_end: periodEndIso,
         total_cents: totalCents,
         generated_by: user.id,
+        published_at: publish ? new Date().toISOString() : null,
       })
       .select("id")
       .single()

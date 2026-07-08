@@ -79,7 +79,11 @@ export default function PaymentsPage() {
       setOpenInvoices(open)
       setPayments(paymentsRes.data ?? [])
       if (invoicesRes.ok) {
-        setSavedInvoices(await invoicesRes.json())
+        const invoicesData = await invoicesRes.json()
+        setSavedInvoices(invoicesData)
+        if (invoicesData.some((inv: CustomerInvoice) => !inv.viewed_at)) {
+          fetch("/api/customer-invoices/mark-viewed", { method: "POST" })
+        }
       }
       setLoading(false)
     }

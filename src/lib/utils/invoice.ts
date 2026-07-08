@@ -11,6 +11,7 @@ export function formatInvoicePeriod(
     case "month":
       return format(start, "MMMM yyyy")
     case "week":
+    case "custom":
       return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`
     case "day":
       return format(start, "MMMM d, yyyy")
@@ -26,4 +27,5 @@ export const PERIOD_TYPE_LABELS: Record<CustomerInvoice["period_type"], string> 
   day: "Day",
   week: "Week",
   month: "Month",
+  custom: "Custom",
 }
