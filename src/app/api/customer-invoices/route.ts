@@ -22,13 +22,21 @@ export async function GET(req: NextRequest) {
 
   const isAdmin = ["admin", "staff"].includes(profile.role)
   const requestedCustomerId = req.nextUrl.searchParams.get("customerId")
-  const customerId = isAdmin ? requestedCustomerId || user.id : user.id
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("customer_invoices")
     .select("*, customer:profiles!customer_id(*), items:customer_invoice_items(*)")
-    .eq("customer_id", customerId)
+
+  if (isAdmin) {
+    // Admin/staff with no customerId gets every invoice (admin portal list view).
+    if (requestedCustomerId) query = query.eq("customer_id", requestedCustomerId)
+  } else {
+    query = query.eq("customer_id", user.id)
+  }
+
+  const { data, error } = await query
     .order("period_start", { ascending: false })
+    .limit(200)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
