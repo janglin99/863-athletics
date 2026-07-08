@@ -1,0 +1,235 @@
+import { NextRequest, NextResponse } from "next/server"
+import {
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+} from "date-fns"
+import { createClient } from "@/lib/supabase/server"
+
+interface BookingRow {
+  id: string
+  total_cents: number
+  payment_status: string
+  participant_count: number
+  created_at: string
+  rate: { name: string } | { name: string }[] | null
+  slots: { start_time: string; end_time: string; status: string }[] | null
+}
+
+function rateName(rate: BookingRow["rate"]): string {
+  if (!rate) return "Session"
+  if (Array.isArray(rate)) return rate[0]?.name ?? "Session"
+  return rate.name
+}
+
+function earliestSlotStart(booking: BookingRow): string {
+  const active = (booking.slots ?? []).filter((s) => s.status !== "cancelled")
+  if (active.length === 0) return booking.created_at
+  return active.reduce((earliest, s) =>
+    new Date(s.start_time) < new Date(earliest.start_time) ? s : earliest
+  ).start_time
+}
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile || !["admin", "staff"].includes(profile.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const { customerId, periodType, referenceDate, bookingId } = await req.json()
+
+  if (!customerId || !periodType) {
+    return NextResponse.json(
+      { error: "customerId and periodType are required" },
+      { status: 400 }
+    )
+  }
+  if (!["session", "day", "week", "month"].includes(periodType)) {
+    return NextResponse.json({ error: "Invalid periodType" }, { status: 400 })
+  }
+
+  const { data: customer } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", customerId)
+    .single()
+
+  if (!customer) {
+    return NextResponse.json({ error: "Customer not found" }, { status: 404 })
+  }
+
+  let periodStart: Date
+  let periodEnd: Date
+  let bookings: BookingRow[] = []
+
+  if (periodType === "session") {
+    if (!bookingId) {
+      return NextResponse.json(
+        { error: "bookingId is required for session invoices" },
+        { status: 400 }
+      )
+    }
+    const { data: booking, error } = await supabase
+      .from("bookings")
+      .select(
+        "id, total_cents, payment_status, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status)"
+      )
+      .eq("id", bookingId)
+      .eq("customer_id", customerId)
+      .single()
+
+    if (error || !booking) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+    }
+    bookings = [booking as unknown as BookingRow]
+    const start = earliestSlotStart(bookings[0])
+    periodStart = new Date(start)
+    const activeSlots = (bookings[0].slots ?? []).filter(
+      (s) => s.status !== "cancelled"
+    )
+    periodEnd =
+      activeSlots.length > 0
+        ? new Date(
+            activeSlots.reduce((latest, s) =>
+              new Date(s.end_time) > new Date(latest.end_time) ? s : latest
+            ).end_time
+          )
+        : periodStart
+  } else {
+    const ref = referenceDate ? new Date(referenceDate) : new Date()
+    if (periodType === "day") {
+      periodStart = startOfDay(ref)
+      periodEnd = endOfDay(ref)
+    } else if (periodType === "week") {
+      periodStart = startOfWeek(ref, { weekStartsOn: 1 })
+      periodEnd = endOfWeek(ref, { weekStartsOn: 1 })
+    } else {
+      periodStart = startOfMonth(ref)
+      periodEnd = endOfMonth(ref)
+    }
+
+    const { data, error } = await supabase
+      .from("bookings")
+      .select(
+        "id, total_cents, payment_status, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status)"
+      )
+      .eq("customer_id", customerId)
+      .neq("status", "cancelled")
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    bookings = ((data ?? []) as unknown as BookingRow[]).filter((b) => {
+      const start = new Date(earliestSlotStart(b))
+      return start >= periodStart && start <= periodEnd
+    })
+  }
+
+  const lineItems = bookings.map((b) => ({
+    booking_id: b.id,
+    description:
+      rateName(b.rate) + (b.participant_count > 1 ? ` (×${b.participant_count})` : ""),
+    session_date: earliestSlotStart(b),
+    payment_status: b.payment_status,
+    amount_cents: b.total_cents,
+  }))
+
+  const totalCents = lineItems.reduce((sum, i) => sum + i.amount_cents, 0)
+  const paidCents = lineItems
+    .filter((i) => i.payment_status === "paid")
+    .reduce((sum, i) => sum + i.amount_cents, 0)
+
+  const periodStartIso = periodStart.toISOString()
+  const periodEndIso = periodEnd.toISOString()
+
+  const { data: existing } = await supabase
+    .from("customer_invoices")
+    .select("id")
+    .eq("customer_id", customerId)
+    .eq("period_type", periodType)
+    .eq("period_start", periodStartIso)
+    .eq("period_end", periodEndIso)
+    .maybeSingle()
+
+  let invoiceId: string
+
+  if (existing) {
+    invoiceId = existing.id
+    const { error } = await supabase
+      .from("customer_invoices")
+      .update({
+        total_cents: totalCents,
+        paid_cents: paidCents,
+        generated_by: user.id,
+      })
+      .eq("id", invoiceId)
+    if (error) {
+      return NextResponse.json(
+        { error: "Failed to update invoice" },
+        { status: 500 }
+      )
+    }
+    await supabase
+      .from("customer_invoice_items")
+      .delete()
+      .eq("invoice_id", invoiceId)
+  } else {
+    const { data: newInvoice, error } = await supabase
+      .from("customer_invoices")
+      .insert({
+        customer_id: customerId,
+        period_type: periodType,
+        period_start: periodStartIso,
+        period_end: periodEndIso,
+        total_cents: totalCents,
+        paid_cents: paidCents,
+        generated_by: user.id,
+      })
+      .select("id")
+      .single()
+    if (error || !newInvoice) {
+      return NextResponse.json(
+        { error: error?.message || "Failed to create invoice" },
+        { status: 500 }
+      )
+    }
+    invoiceId = newInvoice.id
+  }
+
+  if (lineItems.length > 0) {
+    const { error: itemsError } = await supabase
+      .from("customer_invoice_items")
+      .insert(lineItems.map((item) => ({ invoice_id: invoiceId, ...item })))
+    if (itemsError) {
+      return NextResponse.json(
+        { error: "Failed to create invoice items" },
+        { status: 500 }
+      )
+    }
+  }
+
+  const { data: invoice } = await supabase
+    .from("customer_invoices")
+    .select("*, customer:profiles!customer_id(*), items:customer_invoice_items(*)")
+    .eq("id", invoiceId)
+    .single()
+
+  return NextResponse.json(invoice)
+}

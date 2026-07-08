@@ -15,8 +15,9 @@ import {
   formatDateTime,
   formatTime,
 } from "@/lib/utils/format"
-import { CreditCard, FileText, ChevronRight } from "lucide-react"
-import type { Booking, Payment } from "@/types"
+import { formatInvoicePeriod, PERIOD_TYPE_LABELS } from "@/lib/utils/invoice"
+import { CreditCard, FileText, ChevronRight, Eye, Download } from "lucide-react"
+import type { Booking, Payment, CustomerInvoice } from "@/types"
 
 const paymentStatusColors: Record<string, string> = {
   completed: "bg-success/10 text-success border-success/30",
@@ -31,9 +32,10 @@ interface OpenInvoice {
 }
 
 export default function PaymentsPage() {
-  const [tab, setTab] = useState<"open" | "history">("open")
+  const [tab, setTab] = useState<"open" | "history" | "invoices">("open")
   const [openInvoices, setOpenInvoices] = useState<OpenInvoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [savedInvoices, setSavedInvoices] = useState<CustomerInvoice[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function PaymentsPage() {
         return
       }
 
-      const [bookingsRes, paymentsRes] = await Promise.all([
+      const [bookingsRes, paymentsRes, invoicesRes] = await Promise.all([
         supabase
           .from("bookings")
           .select("*, rate:rates(*), slots:booking_slots(*), payments(*)")
@@ -60,6 +62,7 @@ export default function PaymentsPage() {
           .select("*")
           .eq("customer_id", user.id)
           .order("created_at", { ascending: false }),
+        fetch("/api/customer-invoices"),
       ])
 
       const bookings = (bookingsRes.data ?? []) as Booking[]
@@ -75,6 +78,9 @@ export default function PaymentsPage() {
 
       setOpenInvoices(open)
       setPayments(paymentsRes.data ?? [])
+      if (invoicesRes.ok) {
+        setSavedInvoices(await invoicesRes.json())
+      }
       setLoading(false)
     }
     load()
@@ -94,7 +100,7 @@ export default function PaymentsPage() {
 
       <Tabs
         value={tab}
-        onValueChange={(v) => setTab(v as "open" | "history")}
+        onValueChange={(v) => setTab(v as "open" | "history" | "invoices")}
         className="mb-6"
       >
         <TabsList className="bg-bg-secondary">
@@ -102,6 +108,9 @@ export default function PaymentsPage() {
             Open ({openInvoices.length})
           </TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="invoices">
+            Invoices ({savedInvoices.length})
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -196,6 +205,72 @@ export default function PaymentsPage() {
               })}
             </div>
           </>
+        )
+      ) : tab === "invoices" ? (
+        savedInvoices.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No invoices yet"
+            description="Invoices generated for your account will appear here"
+          />
+        ) : (
+          <div className="space-y-3">
+            {savedInvoices.map((invoice) => (
+              <Card key={invoice.id} className="bg-bg-secondary border-border">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm">
+                          {invoice.invoice_number}
+                        </p>
+                        <Badge
+                          variant="outline"
+                          className="bg-text-secondary/10 text-text-secondary border-text-secondary/30"
+                        >
+                          {PERIOD_TYPE_LABELS[invoice.period_type]}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-text-muted mt-1">
+                        {formatInvoicePeriod(invoice)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 flex items-center gap-3">
+                      <span className="font-display font-bold text-brand-orange">
+                        {formatCents(invoice.total_cents)}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            window.open(
+                              `/api/customer-invoices/${invoice.id}/pdf`,
+                              "_blank"
+                            )
+                          }
+                          className="p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+                          title="View / Print"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            window.open(
+                              `/api/customer-invoices/${invoice.id}/pdf?download=1`,
+                              "_blank"
+                            )
+                          }
+                          className="p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )
       ) : payments.length === 0 ? (
         <EmptyState

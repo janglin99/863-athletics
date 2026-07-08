@@ -56,6 +56,33 @@ export interface InvoiceItem {
   created_at: string
 }
 
+export interface CustomerInvoice {
+  id: string
+  invoice_number: string
+  customer_id: string
+  period_type: "session" | "day" | "week" | "month"
+  period_start: string
+  period_end: string
+  total_cents: number
+  paid_cents: number
+  notes: string | null
+  generated_by: string | null
+  created_at: string
+  customer?: Profile
+  items?: CustomerInvoiceItem[]
+}
+
+export interface CustomerInvoiceItem {
+  id: string
+  invoice_id: string
+  booking_id: string | null
+  description: string
+  session_date: string
+  payment_status: string
+  amount_cents: number
+  created_at: string
+}
+
 export interface Rate {
   id: string
   name: string

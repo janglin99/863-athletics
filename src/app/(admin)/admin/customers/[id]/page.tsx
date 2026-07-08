@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { BookingStatusBadge } from "@/components/booking/BookingStatusBadge"
 import { formatCents, formatDateTime, formatPhone } from "@/lib/utils/format"
+import { formatInvoicePeriod, PERIOD_TYPE_LABELS } from "@/lib/utils/invoice"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
@@ -43,8 +44,16 @@ import {
   DollarSign,
   Clock,
   Ticket,
+  FileText,
+  Eye,
+  Download,
 } from "lucide-react"
-import type { Profile, Booking, UserCredit } from "@/types"
+import type { Profile, Booking, UserCredit, CustomerInvoice } from "@/types"
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
 
 export default function AdminCustomerDetailPage() {
   const params = useParams()
@@ -72,6 +81,23 @@ export default function AdminCustomerDetailPage() {
 
   const [deleteCreditOpen, setDeleteCreditOpen] = useState(false)
   const [deleteCreditId, setDeleteCreditId] = useState<string | null>(null)
+
+  // Invoices state
+  const now = new Date()
+  const [invoices, setInvoices] = useState<CustomerInvoice[]>([])
+  const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false)
+  const [invoicePeriodType, setInvoicePeriodType] = useState<
+    "session" | "day" | "week" | "month"
+  >("month")
+  const [invoiceMonth, setInvoiceMonth] = useState(now.getMonth() + 1)
+  const [invoiceYear, setInvoiceYear] = useState(now.getFullYear())
+  const [invoiceDate, setInvoiceDate] = useState(
+    now.toISOString().slice(0, 10)
+  )
+  const [invoiceBookingId, setInvoiceBookingId] = useState<string>("")
+  const [generatingInvoice, setGeneratingInvoice] = useState(false)
+  const [deleteInvoiceTarget, setDeleteInvoiceTarget] =
+    useState<CustomerInvoice | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -103,6 +129,14 @@ export default function AdminCustomerDetailPage() {
       const creditsData = await creditsRes.json()
       setCredits(creditsData.credits || [])
 
+      // Load invoices
+      const invoicesRes = await fetch(
+        `/api/customer-invoices?customerId=${params.id}`
+      )
+      if (invoicesRes.ok) {
+        setInvoices(await invoicesRes.json())
+      }
+
       setLoading(false)
     }
     load()
@@ -112,6 +146,70 @@ export default function AdminCustomerDetailPage() {
     const res = await fetch(`/api/credits?customerId=${params.id}`)
     const data = await res.json()
     setCredits(data.credits || [])
+  }
+
+  const loadInvoices = async () => {
+    const res = await fetch(`/api/customer-invoices?customerId=${params.id}`)
+    if (res.ok) {
+      setInvoices(await res.json())
+    }
+  }
+
+  const handleGenerateInvoice = async () => {
+    if (invoicePeriodType === "session" && !invoiceBookingId) {
+      toast.error("Please select a session")
+      return
+    }
+    setGeneratingInvoice(true)
+    const body: Record<string, unknown> = {
+      customerId: params.id,
+      periodType: invoicePeriodType,
+    }
+    if (invoicePeriodType === "month") {
+      body.referenceDate = new Date(
+        invoiceYear,
+        invoiceMonth - 1,
+        1
+      ).toISOString()
+    } else if (invoicePeriodType === "day" || invoicePeriodType === "week") {
+      body.referenceDate = new Date(invoiceDate).toISOString()
+    } else {
+      body.bookingId = invoiceBookingId
+    }
+
+    const res = await fetch("/api/customer-invoices/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    if (res.ok) {
+      toast.success("Invoice generated")
+      setGenerateInvoiceOpen(false)
+      setInvoiceBookingId("")
+      await loadInvoices()
+    } else {
+      const data = await res.json()
+      toast.error(data.error || "Failed to generate invoice")
+    }
+    setGeneratingInvoice(false)
+  }
+
+  const handleDeleteInvoice = async () => {
+    if (!deleteInvoiceTarget) return
+    const res = await fetch("/api/customer-invoices", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceId: deleteInvoiceTarget.id }),
+    })
+    if (res.ok) {
+      toast.success("Invoice deleted")
+      setDeleteInvoiceTarget(null)
+      await loadInvoices()
+    } else {
+      const data = await res.json()
+      toast.error(data.error || "Failed to delete invoice")
+    }
   }
 
   const handleAddCredit = async () => {
@@ -708,6 +806,212 @@ export default function AdminCustomerDetailPage() {
           )
         })}
       </div>
+
+      {/* Invoices Section */}
+      <Card className="bg-bg-secondary border-border mt-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="font-display uppercase tracking-wide text-sm">
+            Invoices
+          </CardTitle>
+          <Dialog open={generateInvoiceOpen} onOpenChange={setGenerateInvoiceOpen}>
+            <DialogTrigger>
+              <Button size="sm" className="bg-brand-orange hover:bg-brand-orange-dark text-white text-xs">
+                <Plus className="h-3 w-3 mr-1" />
+                Generate Invoice
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-bg-secondary border-border">
+              <DialogHeader>
+                <DialogTitle className="font-display uppercase tracking-wide">
+                  Generate Invoice
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Bill By</Label>
+                  <Select
+                    value={invoicePeriodType}
+                    onValueChange={(v) =>
+                      v &&
+                      setInvoicePeriodType(
+                        v as "session" | "day" | "week" | "month"
+                      )
+                    }
+                  >
+                    <SelectTrigger className="bg-bg-elevated border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="month">Month</SelectItem>
+                      <SelectItem value="week">Week</SelectItem>
+                      <SelectItem value="day">Day</SelectItem>
+                      <SelectItem value="session">Single Session</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {invoicePeriodType === "month" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Month</Label>
+                      <Select
+                        value={String(invoiceMonth)}
+                        onValueChange={(v) => v && setInvoiceMonth(Number(v))}
+                      >
+                        <SelectTrigger className="bg-bg-elevated border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTHS.map((m, i) => (
+                            <SelectItem key={m} value={String(i + 1)}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Year</Label>
+                      <Input
+                        type="number"
+                        value={invoiceYear}
+                        onChange={(e) => setInvoiceYear(Number(e.target.value))}
+                        className="bg-bg-elevated border-border"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(invoicePeriodType === "day" || invoicePeriodType === "week") && (
+                  <div className="space-y-2">
+                    <Label>
+                      {invoicePeriodType === "day" ? "Date" : "Any date in the week"}
+                    </Label>
+                    <Input
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(e) => setInvoiceDate(e.target.value)}
+                      className="bg-bg-elevated border-border"
+                    />
+                  </div>
+                )}
+
+                {invoicePeriodType === "session" && (
+                  <div className="space-y-2">
+                    <Label>Session</Label>
+                    <Select
+                      value={invoiceBookingId}
+                      onValueChange={(v) => v && setInvoiceBookingId(v)}
+                    >
+                      <SelectTrigger className="bg-bg-elevated border-border">
+                        <SelectValue placeholder="Select a booking" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bookings.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.booking_number} · {b.rate?.name}
+                            {b.slots?.[0] && ` · ${formatDateTime(b.slots[0].start_time)}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleGenerateInvoice}
+                  disabled={generatingInvoice}
+                  className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold"
+                >
+                  {generatingInvoice && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Generate Invoice
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {invoices.length === 0 ? (
+            <p className="text-sm text-text-muted">No saved invoices</p>
+          ) : (
+            <div className="space-y-3">
+              {invoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="bg-bg-elevated rounded-lg border border-border p-4 flex items-start justify-between"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-text-secondary/10 text-text-secondary border-text-secondary/30">
+                        <FileText className="h-3 w-3 mr-1" />
+                        {invoice.invoice_number}
+                      </Badge>
+                      <span className="text-xs text-text-muted">
+                        {PERIOD_TYPE_LABELS[invoice.period_type]}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold">
+                      {formatInvoicePeriod(invoice)}
+                    </p>
+                    <p className="text-xs text-text-secondary">
+                      {formatCents(invoice.total_cents)} total
+                      {invoice.paid_cents < invoice.total_cents &&
+                        ` · ${formatCents(invoice.total_cents - invoice.paid_cents)} due`}
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Generated {formatDateTime(invoice.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-text-secondary h-8 w-8 p-0"
+                      onClick={() =>
+                        window.open(`/api/customer-invoices/${invoice.id}/pdf`, "_blank")
+                      }
+                      title="View / Print"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-text-secondary h-8 w-8 p-0"
+                      onClick={() =>
+                        window.open(`/api/customer-invoices/${invoice.id}/pdf?download=1`, "_blank")
+                      }
+                      title="Download"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-error h-8 w-8 p-0"
+                      onClick={() => setDeleteInvoiceTarget(invoice)}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Delete Invoice Confirm */}
+      <ConfirmDialog
+        open={!!deleteInvoiceTarget}
+        onOpenChange={(open) => !open && setDeleteInvoiceTarget(null)}
+        title="Delete Invoice"
+        description={`This will permanently delete invoice ${deleteInvoiceTarget?.invoice_number}. This action cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={handleDeleteInvoice}
+        variant="destructive"
+      />
     </div>
   )
 }
