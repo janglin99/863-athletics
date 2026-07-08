@@ -28,6 +28,7 @@ import {
   CommandItem,
 } from "@/components/ui/command"
 import { formatDateTime } from "@/lib/utils/format"
+import { formatEastern } from "@/lib/utils/timezone"
 import { toast } from "sonner"
 import { Plus, Loader2, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -65,13 +66,16 @@ export function GenerateInvoiceDialog({
 
   const [customerBookings, setCustomerBookings] = useState<Booking[]>([])
 
-  const now = new Date()
+  // "Today" as the facility (Eastern) sees it, not the admin's own browser
+  // timezone or UTC — otherwise these defaults can silently point at the
+  // wrong day/month depending on where staff happen to be.
+  const todayEastern = formatEastern(new Date(), "yyyy-MM-dd")
   const [periodType, setPeriodType] = useState<PeriodType>("month")
-  const [month, setMonth] = useState(now.getMonth() + 1)
-  const [year, setYear] = useState(now.getFullYear())
-  const [date, setDate] = useState(now.toISOString().slice(0, 10))
-  const [customStart, setCustomStart] = useState(now.toISOString().slice(0, 10))
-  const [customEnd, setCustomEnd] = useState(now.toISOString().slice(0, 10))
+  const [month, setMonth] = useState(Number(formatEastern(new Date(), "M")))
+  const [year, setYear] = useState(Number(formatEastern(new Date(), "yyyy")))
+  const [date, setDate] = useState(todayEastern)
+  const [customStart, setCustomStart] = useState(todayEastern)
+  const [customEnd, setCustomEnd] = useState(todayEastern)
   const [bookingId, setBookingId] = useState("")
   const [publishImmediately, setPublishImmediately] = useState(false)
 
@@ -108,15 +112,16 @@ export function GenerateInvoiceDialog({
   }, [activeCustomerId])
 
   const resetForm = () => {
+    const resetToday = formatEastern(new Date(), "yyyy-MM-dd")
     setPickedCustomerId("")
     setCustomerSearch("")
     setCustomerBookings([])
     setPeriodType("month")
-    setMonth(now.getMonth() + 1)
-    setYear(now.getFullYear())
-    setDate(now.toISOString().slice(0, 10))
-    setCustomStart(now.toISOString().slice(0, 10))
-    setCustomEnd(now.toISOString().slice(0, 10))
+    setMonth(Number(formatEastern(new Date(), "M")))
+    setYear(Number(formatEastern(new Date(), "yyyy")))
+    setDate(resetToday)
+    setCustomStart(resetToday)
+    setCustomEnd(resetToday)
     setBookingId("")
     setPublishImmediately(false)
   }
@@ -141,9 +146,12 @@ export function GenerateInvoiceDialog({
       publish: publishImmediately,
     }
     if (periodType === "month") {
-      body.referenceDate = new Date(year, month - 1, 1).toISOString()
+      // Plain "YYYY-MM-DD" — the server anchors this to the facility's
+      // timezone, so this must not go through a local Date object first
+      // (that would tie the result to the admin's browser timezone).
+      body.referenceDate = `${year}-${String(month).padStart(2, "0")}-01`
     } else if (periodType === "day" || periodType === "week") {
-      body.referenceDate = new Date(date).toISOString()
+      body.referenceDate = date
     } else if (periodType === "custom") {
       body.startDate = customStart
       body.endDate = customEnd

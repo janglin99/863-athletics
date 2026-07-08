@@ -1,24 +1,24 @@
-import { format } from "date-fns"
+import { formatEastern } from "@/lib/utils/timezone"
 import type { CustomerInvoice } from "@/types"
 
 export function formatInvoicePeriod(
   invoice: Pick<CustomerInvoice, "period_type" | "period_start" | "period_end">
 ): string {
-  const start = new Date(invoice.period_start)
-  const end = new Date(invoice.period_end)
+  const start = invoice.period_start
+  const end = invoice.period_end
 
   switch (invoice.period_type) {
     case "month":
-      return format(start, "MMMM yyyy")
+      return formatEastern(start, "MMMM yyyy")
     case "week":
     case "custom":
-      return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`
+      return `${formatEastern(start, "MMM d")} – ${formatEastern(end, "MMM d, yyyy")}`
     case "day":
-      return format(start, "MMMM d, yyyy")
+      return formatEastern(start, "MMMM d, yyyy")
     case "session":
-      return format(start, "MMMM d, yyyy 'at' h:mm a")
+      return formatEastern(start, "MMMM d, yyyy 'at' h:mm a")
     default:
-      return format(start, "MMMM d, yyyy")
+      return formatEastern(start, "MMMM d, yyyy")
   }
 }
 

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import {
-  startOfDay,
-  endOfDay,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-} from "date-fns"
 import { createClient } from "@/lib/supabase/server"
 import { recomputeInvoicePaidCents } from "@/lib/invoices/recompute"
+import {
+  startOfDayEastern,
+  endOfDayEastern,
+  startOfWeekEastern,
+  endOfWeekEastern,
+  startOfMonthEastern,
+  endOfMonthEastern,
+  parseEasternDateOnly,
+  parseEasternDateOnlyEnd,
+} from "@/lib/utils/timezone"
 
 const BOOKING_SELECT =
   "id, total_cents, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status), payments(amount_cents, status)"
@@ -152,19 +154,25 @@ export async function POST(req: NextRequest) {
           )
         : periodStart
   } else {
-    const ref = referenceDate ? new Date(referenceDate) : new Date()
-    if (periodType === "day") {
-      periodStart = startOfDay(ref)
-      periodEnd = endOfDay(ref)
-    } else if (periodType === "week") {
-      periodStart = startOfWeek(ref, { weekStartsOn: 1 })
-      periodEnd = endOfWeek(ref, { weekStartsOn: 1 })
-    } else if (periodType === "custom") {
-      periodStart = startOfDay(new Date(startDate))
-      periodEnd = endOfDay(new Date(endDate))
+    if (periodType === "custom") {
+      periodStart = parseEasternDateOnly(startDate)
+      periodEnd = parseEasternDateOnlyEnd(endDate)
     } else {
-      periodStart = startOfMonth(ref)
-      periodEnd = endOfMonth(ref)
+      // referenceDate is a plain "YYYY-MM-DD" date-picker value — anchor it
+      // to the facility's timezone before deriving day/week/month bounds,
+      // otherwise the boundary lands on whatever timezone this process
+      // happens to run in (UTC on Vercel), shifting everything back a day.
+      const ref = referenceDate ? parseEasternDateOnly(referenceDate) : new Date()
+      if (periodType === "day") {
+        periodStart = startOfDayEastern(ref)
+        periodEnd = endOfDayEastern(ref)
+      } else if (periodType === "week") {
+        periodStart = startOfWeekEastern(ref)
+        periodEnd = endOfWeekEastern(ref)
+      } else {
+        periodStart = startOfMonthEastern(ref)
+        periodEnd = endOfMonthEastern(ref)
+      }
     }
 
     const { data, error } = await supabase
