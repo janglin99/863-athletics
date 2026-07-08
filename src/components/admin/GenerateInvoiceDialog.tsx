@@ -82,7 +82,6 @@ export function GenerateInvoiceDialog({
       const { data } = await supabase
         .from("profiles")
         .select("id, first_name, last_name, email, phone, role")
-        .eq("role", "customer")
         .order("first_name", { ascending: true })
         .limit(500)
       setCustomers((data as Profile[]) || [])
@@ -247,6 +246,9 @@ export function GenerateInvoiceDialog({
                             <div className="flex flex-col">
                               <span className="font-medium">
                                 {c.first_name} {c.last_name}
+                                {c.role !== "customer" && (
+                                  <span className="text-text-muted"> · {c.role}</span>
+                                )}
                               </span>
                               <span className="text-xs text-text-muted">
                                 {c.email}
