@@ -13,14 +13,14 @@ import {
 } from "@/lib/utils/timezone"
 
 const BOOKING_SELECT =
-  "id, total_cents, participant_count, created_at, rate:rates(name), slots:booking_slots(start_time, end_time, status), payments(amount_cents, status)"
+  "id, total_cents, participant_count, created_at, rate:rates(name, type), slots:booking_slots(start_time, end_time, status), payments(amount_cents, status)"
 
 interface BookingRow {
   id: string
   total_cents: number
   participant_count: number
   created_at: string
-  rate: { name: string } | { name: string }[] | null
+  rate: { name: string; type: string } | { name: string; type: string }[] | null
   slots: { start_time: string; end_time: string; status: string }[] | null
   payments: { amount_cents: number; status: string }[] | null
 }
@@ -31,12 +31,26 @@ function rateName(rate: BookingRow["rate"]): string {
   return rate.name
 }
 
+function rateType(rate: BookingRow["rate"]): string | null {
+  if (!rate) return null
+  if (Array.isArray(rate)) return rate[0]?.type ?? null
+  return rate.type
+}
+
 function earliestSlotStart(booking: BookingRow): string {
   const active = (booking.slots ?? []).filter((s) => s.status !== "cancelled")
   if (active.length === 0) return booking.created_at
   return active.reduce((earliest, s) =>
     new Date(s.start_time) < new Date(earliest.start_time) ? s : earliest
   ).start_time
+}
+
+function latestSlotEnd(booking: BookingRow): string | null {
+  const active = (booking.slots ?? []).filter((s) => s.status !== "cancelled")
+  if (active.length === 0) return null
+  return active.reduce((latest, s) =>
+    new Date(s.end_time) > new Date(latest.end_time) ? s : latest
+  ).end_time
 }
 
 // bookings.payment_status is not trustworthy — it's set to 'paid' at booking
@@ -196,6 +210,8 @@ export async function POST(req: NextRequest) {
     description:
       rateName(b.rate) + (b.participant_count > 1 ? ` (×${b.participant_count})` : ""),
     session_date: earliestSlotStart(b),
+    session_end: latestSlotEnd(b),
+    is_rental: rateType(b.rate) === "gym_rental",
     payment_status: lineItemStatus(b),
     amount_cents: b.total_cents,
   }))

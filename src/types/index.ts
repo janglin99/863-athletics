@@ -82,6 +82,8 @@ export interface CustomerInvoiceItem {
   booking_id: string | null
   description: string
   session_date: string
+  session_end: string | null
+  is_rental: boolean
   payment_status: string
   amount_cents: number
   created_at: string

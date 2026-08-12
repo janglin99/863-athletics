@@ -218,6 +218,14 @@ function formatDate(dateString: string): string {
   })
 }
 
+function formatTime(dateString: string): string {
+  return new Date(dateString).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  })
+}
+
 interface CustomerInvoiceDocumentProps {
   invoice: CustomerInvoice
   customer: Profile
@@ -308,9 +316,17 @@ export function CustomerInvoiceDocument({
           ) : (
             items.map((item: CustomerInvoiceItem) => (
               <View key={item.id} style={styles.tableRow}>
-                <Text style={[styles.cellText, styles.colDate]}>
-                  {formatDate(item.session_date)}
-                </Text>
+                <View style={styles.colDate}>
+                  <Text style={styles.cellText}>
+                    {formatDate(item.session_date)}
+                  </Text>
+                  {item.is_rental && item.session_end && (
+                    <Text style={styles.cellTextMuted}>
+                      {formatTime(item.session_date)}–
+                      {formatTime(item.session_end)}
+                    </Text>
+                  )}
+                </View>
                 <Text style={[styles.cellText, styles.colDescription]}>
                   {item.description}
                 </Text>
