@@ -73,23 +73,46 @@ export default function AdminBookingsPage() {
   const [refreshingCodes, setRefreshingCodes] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupBy>("none")
 
-  const loadBookings = useCallback(async () => {
+  const loadBookings = useCallback(async (searchQuery: string) => {
+    setLoading(true)
     const supabase = createClient()
-    const { data } = await supabase
+    const q = searchQuery.trim().replace(/[,()]/g, "")
+
+    let query = supabase
       .from("bookings")
       .select(
         "*, customer:profiles!customer_id(first_name, last_name, email), rate:rates(name), slots:booking_slots(*)"
       )
       .order("created_at", { ascending: false })
-      .limit(100)
 
+    if (q) {
+      const { data: matchingCustomers } = await supabase
+        .from("profiles")
+        .select("id")
+        .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+
+      const customerIds = (matchingCustomers ?? []).map((c) => c.id)
+      const orParts = [`booking_number.ilike.%${q}%`]
+      if (customerIds.length > 0) {
+        orParts.push(`customer_id.in.(${customerIds.join(",")})`)
+      }
+      query = query.or(orParts.join(","))
+    } else {
+      query = query.limit(100)
+    }
+
+    const { data } = await query
     setBookings(data || [])
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    loadBookings()
-  }, [loadBookings])
+    const handle = setTimeout(
+      () => loadBookings(search),
+      search.trim() ? 300 : 0
+    )
+    return () => clearTimeout(handle)
+  }, [search, loadBookings])
 
   useEffect(() => {
     async function checkRole() {
@@ -292,7 +315,7 @@ export default function AdminBookingsPage() {
       )
     }
     clearSelection()
-    await loadBookings()
+    await loadBookings(search)
   }
 
   const handleBulkApplyPromo = async () => {
@@ -342,7 +365,7 @@ export default function AdminBookingsPage() {
     setBulkPromoOpen(false)
     setBulkPromoCode("")
     clearSelection()
-    await loadBookings()
+    await loadBookings(search)
   }
 
   const handleBulkDelete = async () => {
@@ -388,7 +411,7 @@ export default function AdminBookingsPage() {
     }
 
     clearSelection()
-    await loadBookings()
+    await loadBookings(search)
   }
 
   return (
@@ -396,7 +419,9 @@ export default function AdminBookingsPage() {
       <PageHeader
         title="All Bookings"
         description="Manage customer bookings"
-        action={<AdminCreateBookingDialog onCreated={loadBookings} />}
+        action={
+          <AdminCreateBookingDialog onCreated={() => loadBookings(search)} />
+        }
       />
 
       <Tabs
