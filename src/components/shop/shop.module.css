@@ -81,7 +81,7 @@
 }
 .price small { font-size: 0.9rem; font-weight: 500; color: var(--muted); margin-left: 0.4rem; }
 
-.desc { color: var(--muted); line-height: 1.6; margin: 1rem 0 1.75rem; }
+.desc { color: var(--muted); line-height: 1.6; margin: 1rem 0 1.75rem; white-space: pre-line; }
 
 /* --- Purchase panel ------------------------------------------------ */
 .purchase {
@@ -103,19 +103,7 @@
 
 .sizes { border: 0; padding: 0; margin: 0 0 1.5rem; min-width: 0; }
 .sizes legend { padding: 0; margin-bottom: 0.75rem; }
-.sizeGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
-@media (min-width: 480px) { .sizeGrid { grid-template-columns: repeat(6, 1fr); } }
-@media (min-width: 860px) and (max-width: 1040px) { .sizeGrid { grid-template-columns: repeat(3, 1fr); } }
-
-.methodGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-.pickupBox {
-  margin: 0 0 1.5rem;
-  padding: 0.9rem 1rem;
-  border: 1.5px dashed var(--green);
-  border-radius: 12px;
-  background: rgba(34, 195, 34, 0.08);
-}
-.pickupBox address { font-style: normal; white-space: pre-line; margin-top: 0.4rem; line-height: 1.5; }
+.sizeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr)); gap: 0.6rem; }
 
 .sizeOption { position: relative; cursor: pointer; }
 .sizeOption input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }

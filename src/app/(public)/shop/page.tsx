@@ -7,9 +7,9 @@ import { getShopConfig } from "@/lib/shop/config"
 import { formatCents } from "@/lib/utils/format"
 import styles from "@/components/shop/shop.module.css"
 
-export const metadata: Metadata = {
-  title: SHIRT.name,
-  description: SHIRT.description,
+export async function generateMetadata(): Promise<Metadata> {
+  const { description } = await getShopConfig()
+  return { title: SHIRT.name, description }
 }
 
 // Prices and sold-out flags are edited in the admin, so never prerender.
@@ -60,7 +60,7 @@ export default async function ShopPage() {
                 </>
               )}
             </p>
-            <p className={styles.desc}>{SHIRT.description}</p>
+            <p className={styles.desc}>{config.description}</p>
 
             <ShirtPurchase {...config} />
 

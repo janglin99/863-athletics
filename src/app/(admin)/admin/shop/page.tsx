@@ -8,9 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { MAX_PICKUP_ADDRESS_LENGTH } from "@/lib/shop/products"
+import {
+  MAX_DESCRIPTION_LENGTH,
+  MAX_PICKUP_ADDRESS_LENGTH,
+  MAX_SIZES,
+  SIZE_CODE_PATTERN,
+} from "@/lib/shop/products"
 import { toast } from "sonner"
-import { ExternalLink, Loader2, Save } from "lucide-react"
+import { ExternalLink, Loader2, Plus, Save, Trash2 } from "lucide-react"
 import type { ShopConfig } from "@/lib/shop/config"
 
 // Inputs hold dollar strings; converted to/from cents at the edges.
@@ -26,6 +31,7 @@ interface Row {
 
 export default function AdminShopPage() {
   const [rows, setRows] = useState<Row[]>([])
+  const [description, setDescription] = useState("")
   const [shipping, setShipping] = useState("")
   const [shippingEnabled, setShippingEnabled] = useState(true)
   const [pickupEnabled, setPickupEnabled] = useState(false)
@@ -42,6 +48,7 @@ export default function AdminShopPage() {
         soldOut: s.soldOut,
       }))
     )
+    setDescription(config.description)
     setShipping(toDollars(config.shippingCents))
     setShippingEnabled(config.shippingEnabled)
     setPickupEnabled(config.pickupEnabled)
@@ -58,15 +65,41 @@ export default function AdminShopPage() {
     fetchConfig()
   }, [])
 
-  const update = (code: string, patch: Partial<Row>) =>
-    setRows((rs) => rs.map((r) => (r.code === code ? { ...r, ...patch } : r)))
+  // Rows are keyed by position, since the size code itself is editable.
+  const update = (index: number, patch: Partial<Row>) =>
+    setRows((rs) => rs.map((r, i) => (i === index ? { ...r, ...patch } : r)))
+  const remove = (index: number) =>
+    setRows((rs) => rs.filter((_, i) => i !== index))
+  const add = () =>
+    setRows((rs) => [
+      ...rs,
+      { code: "", label: "", price: rs.at(-1)?.price ?? "30.00", soldOut: false },
+    ])
 
   async function save() {
     const sizes = rows.map((r) => ({
-      code: r.code,
+      code: r.code.trim(),
+      label: r.label.trim(),
       priceCents: toCents(r.price),
       soldOut: r.soldOut,
     }))
+    const codes = sizes.map((s) => s.code.toLowerCase())
+    if (!description.trim()) {
+      toast.error("Enter a product description")
+      return
+    }
+    if (sizes.length === 0) {
+      toast.error("Add at least one size")
+      return
+    }
+    if (sizes.some((s) => !SIZE_CODE_PATTERN.test(s.code))) {
+      toast.error("Every size needs a short code, like S, XL or Youth M")
+      return
+    }
+    if (new Set(codes).size !== codes.length) {
+      toast.error("Each size code must be unique")
+      return
+    }
     const shippingCents = toCents(shipping)
     if (
       sizes.some((s) => !Number.isFinite(s.priceCents) || s.priceCents < 100) ||
@@ -91,6 +124,7 @@ export default function AdminShopPage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        description: description.trim(),
         sizes,
         shippingCents,
         shippingEnabled,
@@ -130,49 +164,106 @@ export default function AdminShopPage() {
         </div>
       ) : (
         <div className="max-w-2xl space-y-8">
+          <div className="bg-bg-secondary rounded-lg border border-border p-6 space-y-3">
+            <h3 className="font-display font-bold uppercase tracking-wide">
+              Description
+            </h3>
+            <p className="text-sm text-text-secondary">
+              The text under the price on the shop page. Line breaks are kept.
+            </p>
+            <Textarea
+              aria-label="Product description"
+              rows={4}
+              maxLength={MAX_DESCRIPTION_LENGTH}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="bg-bg-elevated border-border"
+            />
+            <p className="text-xs text-text-muted text-right">
+              {description.length}/{MAX_DESCRIPTION_LENGTH}
+            </p>
+          </div>
+
           <div className="bg-bg-secondary rounded-lg border border-border p-6 space-y-4">
             <h3 className="font-display font-bold uppercase tracking-wide">
               Sizes
             </h3>
+            <p className="text-sm text-text-secondary">
+              Sizes appear on the shop page in this order. The code is the short
+              text on the button (S, XL, Youth M); the name is the longer
+              description shown once selected.
+            </p>
             <div className="divide-y divide-border">
-              <div className="grid grid-cols-[1fr_9rem_6rem] gap-4 pb-2 text-xs uppercase tracking-wide text-text-muted">
-                <span>Size</span>
+              <div className="hidden sm:grid grid-cols-[5.5rem_1fr_8rem_4.5rem_2rem] gap-3 pb-2 text-xs uppercase tracking-wide text-text-muted">
+                <span>Code</span>
+                <span>Name</span>
                 <span>Price (USD)</span>
                 <span>Sold out</span>
+                <span />
               </div>
-              {rows.map((r) => (
+              {rows.map((r, i) => (
                 <div
-                  key={r.code}
-                  className="grid grid-cols-[1fr_9rem_6rem] items-center gap-4 py-3"
+                  key={i}
+                  className="grid grid-cols-[5.5rem_1fr] sm:grid-cols-[5.5rem_1fr_8rem_4.5rem_2rem] items-center gap-3 py-3"
                 >
-                  <div>
-                    <span className="font-semibold">{r.code}</span>{" "}
-                    <span className="text-sm text-text-secondary">
-                      {r.label}
-                    </span>
-                  </div>
+                  <Input
+                    aria-label={`Size ${i + 1} code`}
+                    placeholder="XL"
+                    maxLength={12}
+                    value={r.code}
+                    onChange={(e) => update(i, { code: e.target.value })}
+                    className="bg-bg-elevated border-border"
+                  />
+                  <Input
+                    aria-label={`Size ${i + 1} name`}
+                    placeholder="X-Large"
+                    maxLength={40}
+                    value={r.label}
+                    onChange={(e) => update(i, { label: e.target.value })}
+                    className="bg-bg-elevated border-border"
+                  />
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
                       $
                     </span>
                     <Input
-                      aria-label={`${r.code} price`}
+                      aria-label={`Size ${i + 1} price`}
                       type="number"
                       min={1}
                       step="0.01"
                       value={r.price}
-                      onChange={(e) => update(r.code, { price: e.target.value })}
+                      onChange={(e) => update(i, { price: e.target.value })}
                       className="bg-bg-elevated border-border pl-7"
                     />
                   </div>
-                  <Switch
-                    aria-label={`${r.code} sold out`}
-                    checked={r.soldOut}
-                    onCheckedChange={(v) => update(r.code, { soldOut: v })}
-                  />
+                  <label className="flex items-center gap-2 text-sm text-text-secondary">
+                    <Switch
+                      aria-label={`Size ${i + 1} sold out`}
+                      checked={r.soldOut}
+                      onCheckedChange={(v) => update(i, { soldOut: v })}
+                    />
+                    <span className="sm:hidden">Sold out</span>
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={`Remove size ${r.code || i + 1}`}
+                    onClick={() => remove(i)}
+                    className="text-text-muted hover:text-red-400 justify-self-end"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={add}
+              disabled={rows.length >= MAX_SIZES}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add size
+            </Button>
           </div>
 
           <div className="bg-bg-secondary rounded-lg border border-border p-6 space-y-5">

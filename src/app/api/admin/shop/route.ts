@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { MAX_PICKUP_ADDRESS_LENGTH, SHIRT_SIZES } from "@/lib/shop/products"
 import {
+  MAX_DESCRIPTION_LENGTH,
+  MAX_PICKUP_ADDRESS_LENGTH,
+  MAX_SIZES,
+  SIZE_CODE_PATTERN,
+} from "@/lib/shop/products"
+import {
+  DESCRIPTION_KEY,
   PICKUP_ADDRESS_KEY,
   PICKUP_ENABLED_KEY,
   SHIPPING_ENABLED_KEY,
   SHIPPING_KEY,
+  SIZES_KEY,
   getShopConfig,
-  priceKey,
-  soldOutKey,
 } from "@/lib/shop/config"
 
 async function requireAdmin() {
@@ -43,15 +48,18 @@ const saveSchema = z.object({
   shippingEnabled: z.boolean(),
   pickupEnabled: z.boolean(),
   pickupAddress: z.string().trim().max(MAX_PICKUP_ADDRESS_LENGTH),
+  description: z.string().trim().min(1).max(MAX_DESCRIPTION_LENGTH),
   sizes: z
     .array(
       z.object({
-        code: z.string(),
+        code: z.string().trim().regex(SIZE_CODE_PATTERN),
+        label: z.string().trim().max(40),
         priceCents: z.number().int().min(100).max(100_000),
         soldOut: z.boolean(),
       })
     )
-    .min(1),
+    .min(1)
+    .max(MAX_SIZES),
 })
 
 export async function PUT(req: NextRequest) {
@@ -63,7 +71,10 @@ export async function PUT(req: NextRequest) {
   const parsed = saveSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Prices must be $1.00–$1,000.00 and the pickup address under 300 characters" },
+      {
+        error:
+          "Check the form: description is required, each size needs a short code (letters/numbers) and a price of $1.00–$1,000.00",
+      },
       { status: 400 }
     )
   }
@@ -81,9 +92,12 @@ export async function PUT(req: NextRequest) {
     )
   }
 
-  const known = new Set(SHIRT_SIZES.map((s) => s.code))
-  if (parsed.data.sizes.some((s) => !known.has(s.code))) {
-    return NextResponse.json({ error: "Unknown size" }, { status: 400 })
+  const codes = parsed.data.sizes.map((s) => s.code.toLowerCase())
+  if (new Set(codes).size !== codes.length) {
+    return NextResponse.json(
+      { error: "Each size code must be unique" },
+      { status: 400 }
+    )
   }
 
   const now = new Date().toISOString()
@@ -92,10 +106,13 @@ export async function PUT(req: NextRequest) {
     { key: SHIPPING_ENABLED_KEY, value: String(parsed.data.shippingEnabled) },
     { key: PICKUP_ENABLED_KEY, value: String(parsed.data.pickupEnabled) },
     { key: PICKUP_ADDRESS_KEY, value: parsed.data.pickupAddress },
-    ...parsed.data.sizes.flatMap((s) => [
-      { key: priceKey(s.code), value: String(s.priceCents) },
-      { key: soldOutKey(s.code), value: String(s.soldOut) },
-    ]),
+    { key: DESCRIPTION_KEY, value: parsed.data.description },
+    {
+      key: SIZES_KEY,
+      value: JSON.stringify(
+        parsed.data.sizes.map((s) => ({ ...s, label: s.label || s.code }))
+      ),
+    },
   ].map((r) => ({ ...r, updated_at: now }))
 
   const { error } = await auth.supabase
