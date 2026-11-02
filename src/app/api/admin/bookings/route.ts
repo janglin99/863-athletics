@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 import { sendEmail } from "@/lib/resend/client"
 import { sendSMS } from "@/lib/twilio/client"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { z } from "zod"
 
 const PAYMENT_METHODS = [
@@ -189,6 +190,8 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     )
   }
+
+  after(() => syncBookingToCalendar(booking.id))
 
   // Record payment row for paid/comp so reports tie out
   if ((isMarkPaid || isComp) && totalCents > 0) {

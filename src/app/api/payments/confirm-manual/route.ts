@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
   // response is sent. generateAccessCodes is idempotent, so it's safe even
   // if the booking somehow already has codes.
   after(() => generateAccessCodes(bookingId))
+  after(() => syncBookingToCalendar(bookingId))
 
   return NextResponse.json({ message: "Payment confirmed" })
 }

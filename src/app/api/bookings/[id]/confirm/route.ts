@@ -3,6 +3,7 @@ import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import Stripe from "stripe"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 
 export async function POST(
   req: NextRequest,
@@ -35,6 +36,7 @@ export async function POST(
     // function is idempotent, so this is a no-op when codes already exist.
     if (booking.status === "confirmed") {
       after(() => generateAccessCodes(id))
+      after(() => syncBookingToCalendar(id))
       return NextResponse.json({ booking })
     }
 
@@ -85,6 +87,7 @@ export async function POST(
     // the function timeout for multi-session bookings, which would leave
     // the booking confirmed but without codes.
     after(() => generateAccessCodes(id))
+    after(() => syncBookingToCalendar(id))
 
     return NextResponse.json({ confirmed: true })
   } catch (error: any) {

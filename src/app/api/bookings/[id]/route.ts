@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET(
@@ -55,6 +57,8 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  after(() => syncBookingToCalendar(id))
+
   return NextResponse.json({ booking: data })
 }
 
@@ -104,6 +108,8 @@ export async function DELETE(
     .from("booking_slots")
     .update({ status: "cancelled" })
     .eq("booking_id", id)
+
+  after(() => syncBookingToCalendar(id))
 
   return NextResponse.json({ message: "Booking cancelled" })
 }

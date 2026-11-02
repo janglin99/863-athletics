@@ -3,6 +3,7 @@ import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { z } from "zod"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { validatePromoCode } from "@/lib/promo-codes/validate"
 
 const createBookingSchema = z.object({
@@ -209,6 +210,8 @@ export async function POST(req: NextRequest) {
       after(() => generateAccessCodes(booking.id))
     }
   }
+
+  after(() => syncBookingToCalendar(booking.id))
 
   return NextResponse.json(
     { booking: { ...booking, slots: slotsData }, message: "Booking created" },

@@ -3,6 +3,7 @@ import { after } from "next/server"
 import Stripe from "stripe"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 
 function getStripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY!)
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
       // with no codes generated. generateAccessCodes is idempotent.
       after(async () => {
         for (const id of bookingIds) {
+          await syncBookingToCalendar(id)
           await generateAccessCodes(id)
         }
       })

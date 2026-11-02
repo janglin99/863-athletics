@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { validatePromoCode } from "@/lib/promo-codes/validate"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
+import {
+  removeBookingFromCalendar,
+  syncBookingToCalendar,
+} from "@/lib/google-calendar/sync"
 import { z } from "zod"
 
 const BOOKING_STATUSES = [
@@ -231,6 +235,8 @@ export async function PATCH(
     }
   }
 
+  after(() => syncBookingToCalendar(id))
+
   const { data: updated, error: reloadErr } = await auth.supabase
     .from("bookings")
     .select(
@@ -334,6 +340,8 @@ export async function DELETE(
   if (deleteErr) {
     return NextResponse.json({ error: deleteErr.message }, { status: 500 })
   }
+
+  after(() => removeBookingFromCalendar(id))
 
   return NextResponse.json({ message: "Booking deleted" })
 }

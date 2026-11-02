@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { createClient } from "@/lib/supabase/server"
 
 export async function POST(
@@ -180,6 +182,8 @@ export async function POST(
       reschedule_fee_cents: feeCents,
     })
     .eq("id", id)
+
+  after(() => syncBookingToCalendar(id))
 
   return NextResponse.json({
     success: true,
