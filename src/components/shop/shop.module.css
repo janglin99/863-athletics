@@ -1,0 +1,270 @@
+/* Theme pulled from the shirt mockup: jet-black tee, kelly/neon green
+   graphics, white outlines, deep-forest radial backdrop. */
+.page {
+  --black: #070907;
+  --ink: #0d110d;
+  --forest-1: #0f3a12;
+  --forest-2: #082209;
+  --green: #22c322;
+  --green-bright: #3ee63e;
+  --green-dark: #148a14;
+  --white: #ffffff;
+  --muted: #a9b8a9;
+  --line: rgba(62, 230, 62, 0.22);
+
+  background:
+    radial-gradient(ellipse at 50% 0%, var(--forest-1) 0%, var(--forest-2) 45%, var(--black) 100%);
+  color: var(--white);
+  padding: 7rem 1rem 5rem;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.crumbs {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+.crumbs a { color: var(--green-bright); text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+  align-items: start;
+}
+@media (min-width: 860px) {
+  .layout { grid-template-columns: 1.05fr 1fr; gap: 3.5rem; }
+  .info { position: sticky; top: 6rem; }
+}
+
+.gallery {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--ink);
+  box-shadow: 0 0 60px rgba(34, 195, 34, 0.18), 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+.gallery img { display: block; width: 100%; height: auto; }
+
+.badge {
+  display: inline-block;
+  background: var(--green);
+  color: var(--black);
+  font-weight: 800;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+}
+
+.title {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(2.4rem, 6vw, 3.6rem);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin: 1rem 0 0.75rem;
+}
+.title span { color: var(--green-bright); }
+
+.price {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--green-bright);
+}
+.price small { font-size: 0.9rem; font-weight: 500; color: var(--muted); margin-left: 0.4rem; }
+
+.desc { color: var(--muted); line-height: 1.6; margin: 1rem 0 1.75rem; }
+
+/* --- Purchase panel ------------------------------------------------ */
+.purchase {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 1.5rem;
+  backdrop-filter: blur(6px);
+}
+
+.label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--white);
+}
+.labelValue { color: var(--green-bright); text-transform: none; letter-spacing: 0; }
+
+.sizes { border: 0; padding: 0; margin: 0 0 1.5rem; min-width: 0; }
+.sizes legend { padding: 0; margin-bottom: 0.75rem; }
+.sizeGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+@media (min-width: 480px) { .sizeGrid { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 860px) and (max-width: 1040px) { .sizeGrid { grid-template-columns: repeat(3, 1fr); } }
+
+.methodGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.pickupBox {
+  margin: 0 0 1.5rem;
+  padding: 0.9rem 1rem;
+  border: 1.5px dashed var(--green);
+  border-radius: 12px;
+  background: rgba(34, 195, 34, 0.08);
+}
+.pickupBox address { font-style: normal; white-space: pre-line; margin-top: 0.4rem; line-height: 1.5; }
+
+.sizeOption { position: relative; cursor: pointer; }
+.sizeOption input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.sizePill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.7rem 0.25rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: var(--ink);
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.sizePill strong { font-size: 1.05rem; }
+.sizePill small { font-size: 0.7rem; color: var(--muted); }
+.sizeOption:hover .sizePill { border-color: var(--green); }
+.sizeOption input:checked + .sizePill {
+  border-color: var(--green-bright);
+  background: var(--green);
+  color: var(--black);
+  transform: translateY(-1px);
+}
+.sizeOption input:checked + .sizePill small { color: var(--black); }
+.sizeOption:has(input:disabled) { cursor: not-allowed; }
+.sizeOption input:disabled + .sizePill {
+  opacity: 0.4;
+  border-style: dashed;
+}
+.sizeOption input:disabled + .sizePill strong { text-decoration: line-through; }
+.sizeOption:hover input:disabled + .sizePill { border-color: rgba(255, 255, 255, 0.2); }
+.sizeOption input:focus-visible + .sizePill { outline: 3px solid var(--white); outline-offset: 2px; }
+
+.qtyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--ink);
+}
+.stepper button {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.3rem;
+  background: transparent;
+  color: var(--white);
+  border: 0;
+  cursor: pointer;
+}
+.stepper button:hover:not(:disabled) { background: var(--green-dark); }
+.stepper button:disabled { color: rgba(255, 255, 255, 0.3); cursor: not-allowed; }
+.stepper output { min-width: 2.5rem; text-align: center; font-weight: 700; }
+
+.summary { margin: 0 0 1.25rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.summary > div { display: flex; justify-content: space-between; padding: 0.25rem 0; color: var(--muted); }
+.summary dd { margin: 0; color: var(--white); }
+.summary .total { color: var(--white); font-size: 1.2rem; font-weight: 800; padding-top: 0.6rem; }
+.summary .total dd { color: var(--green-bright); }
+
+.error {
+  background: rgba(255, 70, 70, 0.12);
+  border: 1px solid rgba(255, 90, 90, 0.5);
+  color: #ffb4b4;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.buy {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--black);
+  background: linear-gradient(180deg, var(--green-bright), var(--green));
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(34, 195, 34, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+}
+.buy:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.buy:focus-visible { outline: 3px solid var(--white); outline-offset: 3px; }
+.buy:disabled { opacity: 0.65; cursor: wait; }
+
+.secure { text-align: center; color: var(--muted); font-size: 0.8rem; margin: 0.9rem 0 0; }
+
+/* --- Selling points ------------------------------------------------ */
+.points {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  display: grid;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.points li::before { content: "✓"; color: var(--green-bright); font-weight: 800; margin-right: 0.6rem; }
+.help { margin-top: 1.25rem; font-size: 0.9rem; color: var(--muted); }
+.help a { color: var(--green-bright); }
+
+/* --- Success page -------------------------------------------------- */
+.successCard {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 2.5rem 1.5rem;
+}
+.successCard h1 {
+  font-family: var(--font-display), sans-serif;
+  font-size: 2.4rem;
+  text-transform: uppercase;
+  margin: 0.5rem 0;
+}
+.successCard p { color: var(--muted); line-height: 1.6; }
+.tick {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--black);
+  display: inline-grid;
+  place-items: center;
+  font-size: 2rem;
+  font-weight: 800;
+}
+.linkBtn {
+  display: inline-block;
+  margin-top: 1.25rem;
+  padding: 0.8rem 1.6rem;
+  background: var(--green);
+  color: var(--black);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 10px;
+  text-decoration: none;
+}
+.linkBtn:hover { background: var(--green-bright); }

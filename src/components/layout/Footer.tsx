@@ -42,6 +42,7 @@ export function Footer() {
             <div className="flex flex-col gap-2">
               {[
                 { href: "/pricing", label: "Pricing" },
+                { href: "/shop", label: "Shop" },
                 { href: "/about", label: "About Us" },
                 { href: "/contact", label: "Contact" },
                 { href: "/waiver", label: "Liability Waiver" },

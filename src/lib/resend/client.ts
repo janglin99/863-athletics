@@ -14,19 +14,25 @@ export async function sendEmail({
   subject,
   text,
   html,
+  idempotencyKey,
 }: {
   to: string
   subject: string
   text: string
   html?: string
+  // Resend dedupes sends sharing a key for 24h — makes webhook retries safe.
+  idempotencyKey?: string
 }) {
   const client = getResendClient()
   if (!client) return null
-  return client.emails.send({
-    from: `${process.env.RESEND_FROM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
-    to,
-    subject,
-    text,
-    html,
-  })
+  return client.emails.send(
+    {
+      from: `${process.env.RESEND_FROM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
+      to,
+      subject,
+      text,
+      html,
+    },
+    idempotencyKey ? { idempotencyKey } : undefined
+  )
 }

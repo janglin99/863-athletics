@@ -4,6 +4,8 @@ import Stripe from "stripe"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
 import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
+import { SHIRT } from "@/lib/shop/products"
+import { sendShopOrderEmail } from "@/lib/shop/order-email"
 
 function getStripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY!)
@@ -68,6 +70,23 @@ export async function POST(req: NextRequest) {
           await generateAccessCodes(id)
         }
       })
+    }
+  }
+
+  // Shop orders: email the customer once the Checkout Session is paid.
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session
+    if (
+      session.metadata?.product === SHIRT.slug &&
+      session.payment_status === "paid"
+    ) {
+      try {
+        await sendShopOrderEmail(session)
+      } catch (error) {
+        console.error("Shop order email failed:", error)
+        // Non-2xx makes Stripe retry; Resend's idempotency key prevents dupes.
+        return NextResponse.json({ error: "Email failed" }, { status: 500 })
+      }
     }
   }
 
