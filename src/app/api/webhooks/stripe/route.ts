@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { generateAccessCodes } from "@/lib/access-codes/generate"
 import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { SHIRT } from "@/lib/shop/products"
-import { sendShopOrderEmail } from "@/lib/shop/order-email"
+import { sendShopOrderAlert, sendShopOrderEmail } from "@/lib/shop/order-email"
 
 function getStripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY!)
@@ -86,6 +86,12 @@ export async function POST(req: NextRequest) {
         console.error("Shop order email failed:", error)
         // Non-2xx makes Stripe retry; Resend's idempotency key prevents dupes.
         return NextResponse.json({ error: "Email failed" }, { status: 500 })
+      }
+      // Best-effort owner alert; never fail the webhook over it.
+      try {
+        await sendShopOrderAlert(session)
+      } catch (error) {
+        console.error("Shop order admin alert failed:", error)
       }
     }
   }

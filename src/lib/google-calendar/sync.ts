@@ -7,6 +7,10 @@ import { FACILITY_TIMEZONE } from "@/lib/utils/timezone"
 // account's email ("Make changes to events"). Everything is a no-op until the
 // three GOOGLE_* env vars are set.
 //
+// Events carry no reminders (useDefault: false) so the calendar's default
+// "30 minutes before" notification doesn't fire for imported bookings. Each
+// session's door code (from access_codes) is written into its description.
+//
 // Each contiguous run of slots (a "session") becomes one event. Event ids are
 // derived from booking + anchor slot, so syncBookingToCalendar is idempotent
 // and needs no extra DB table. Events are tagged with a private extended
@@ -17,6 +21,14 @@ const SCOPE = "https://www.googleapis.com/auth/calendar.events"
 
 // Statuses that should not occupy the calendar.
 const INACTIVE_STATUSES = new Set(["cancelled", "refunded"])
+
+interface AccessCodeRow {
+  booking_slot_id: string | null
+  pin_code: string
+  status: string
+  valid_from: string
+  valid_until: string
+}
 
 interface Slot {
   id: string
@@ -133,7 +145,12 @@ async function deleteEvent(id: string) {
 }
 
 async function upsertEvent(id: string, body: Record<string, unknown>) {
-  const payload = JSON.stringify({ ...body, id, status: "confirmed" })
+  const payload = JSON.stringify({
+    ...body,
+    id,
+    status: "confirmed",
+    reminders: { useDefault: false },
+  })
   // PUT revives a previously-deleted event with the same id; 404 means it
   // never existed, so insert it.
   let res = await gcal(`/events/${id}`, { method: "PUT", body: payload })
@@ -143,6 +160,25 @@ async function upsertEvent(id: string, body: Record<string, unknown>) {
   if (!res.ok) {
     throw new Error(`Google upsert event failed: ${res.status} ${await res.text()}`)
   }
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    timeZone: FACILITY_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+function accessCodeLine(code: AccessCodeRow | undefined) {
+  if (!code) return null
+  if (code.status === "failed" || code.pin_code === "MANUAL_REQUIRED") {
+    return "Access code: GENERATION FAILED — create manually"
+  }
+  if (code.status !== "active" || code.pin_code === "GENERATING") {
+    return "Access code: still being generated"
+  }
+  return `Access code: ${code.pin_code} (valid ${formatTime(code.valid_from)} – ${formatTime(code.valid_until)})`
 }
 
 function mergeSessions(slots: Slot[]) {
@@ -222,15 +258,29 @@ export async function syncBookingToCalendar(bookingId: string) {
       .filter(Boolean)
       .join("\n")
 
+    // One code per session, anchored on the session's first slot. Skip dead
+    // codes superseded by a newer one for the same anchor.
+    const { data: codeRows } = await getSupabaseAdmin()
+      .from("access_codes")
+      .select("booking_slot_id, pin_code, status, valid_from, valid_until")
+      .eq("booking_id", booking.id)
+      .not("status", "in", "(expired,revoked)")
+      .order("created_at")
+    const codeBySlot = new Map<string, AccessCodeRow>()
+    for (const row of (codeRows as AccessCodeRow[] | null) ?? []) {
+      if (row.booking_slot_id) codeBySlot.set(row.booking_slot_id, row)
+    }
+
     const sessions = mergeSessions(slots)
     const wanted = new Set<string>()
 
     for (const session of sessions) {
       const id = eventId(booking.id, session.anchorSlotId)
       wanted.add(id)
+      const codeLine = accessCodeLine(codeBySlot.get(session.anchorSlotId))
       await upsertEvent(id, {
         summary,
-        description,
+        description: codeLine ? `${codeLine}\n\n${description}` : description,
         location: "863 Athletics, 2195 S 30th St, Haines City, FL 33844",
         start: { dateTime: session.start, timeZone: FACILITY_TIMEZONE },
         end: { dateTime: session.end, timeZone: FACILITY_TIMEZONE },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { deliverAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { Seam } from "seam"
 
 export async function POST(req: NextRequest) {
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
       after(async () => {
         for (const bookingId of promotedBookingIds) {
           await deliverAccessCodes(bookingId)
+          await syncBookingToCalendar(bookingId)
         }
       })
     }

@@ -99,3 +99,54 @@ ${deliveryBody ? `<tr><td style="padding:0 24px 8px"><div style="background:#070
   }
   return Boolean(result)
 }
+
+// Internal "new order" alert to the admin inbox (ADMIN_EMAIL). No-op when the
+// env var isn't set. Throws on a Resend error; the caller treats it as
+// best-effort so an alert problem never blocks the customer's confirmation.
+export async function sendShopOrderAlert(session: Stripe.Checkout.Session) {
+  const to = process.env.ADMIN_EMAIL
+  if (!to) return false
+
+  const size = session.metadata?.size ?? ""
+  const quantity = Number(session.metadata?.quantity ?? 1)
+  const isPickup = session.metadata?.fulfillment === "pickup"
+  const shippingCents = session.total_details?.amount_shipping ?? 0
+  const total = session.amount_total ?? 0
+  const orderRef = session.id.slice(-8).toUpperCase()
+  const c = session.customer_details
+  const shipTo = formatAddress(
+    session.collected_information?.shipping_details?.address
+  )
+  const paymentId =
+    typeof session.payment_intent === "string" ? session.payment_intent : null
+
+  const text = [
+    `New shirt order #${orderRef}`,
+    "",
+    `${SHIRT.name} — Size ${size} × ${quantity}`,
+    `Total paid: ${formatCents(total)}${isPickup ? "" : ` (incl. ${formatCents(shippingCents)} shipping)`}`,
+    "",
+    `Customer: ${c?.name ?? "—"}`,
+    `Email: ${c?.email ?? "—"}`,
+    `Phone: ${c?.phone ?? "—"}`,
+    "",
+    isPickup
+      ? `PICKUP ORDER — nothing to ship.\nPickup location: ${session.metadata?.pickup_address ?? "—"}`
+      : `SHIP TO:\n${shipTo ?? "—"}`,
+    "",
+    paymentId
+      ? `Stripe: https://dashboard.stripe.com/payments/${paymentId}`
+      : `Stripe session: ${session.id}`,
+  ].join("\n")
+
+  const result = await sendEmail({
+    to,
+    subject: `New shirt order #${orderRef} — ${size} × ${quantity} (${isPickup ? "pickup" : "ship"}) ${formatCents(total)}`,
+    text,
+    idempotencyKey: `shop-order-admin-${session.id}`,
+  })
+  if (result?.error) {
+    throw new Error(`Resend failed: ${result.error.message}`)
+  }
+  return Boolean(result)
+}

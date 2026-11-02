@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { after } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { deliverAccessCodes } from "@/lib/access-codes/generate"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 import { Seam } from "seam"
 
 // Promotes `pending` access_codes whose PIN has now surfaced on Seam.
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
     after(async () => {
       for (const bookingId of promotedBookingIds) {
         await deliverAccessCodes(bookingId)
+        await syncBookingToCalendar(bookingId)
       }
     })
   }

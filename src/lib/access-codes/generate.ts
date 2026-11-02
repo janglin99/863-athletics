@@ -2,6 +2,7 @@ import { Seam } from "seam"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { sendEmail } from "@/lib/resend/client"
 import { sendSMS } from "@/lib/twilio/client"
+import { syncBookingToCalendar } from "@/lib/google-calendar/sync"
 
 interface BookingSlot {
   id: string
@@ -170,6 +171,8 @@ export async function generateAccessCodes(bookingId: string) {
   }
 
   await deliverAccessCodes(bookingId)
+  // Put the (new) door codes on the Google Calendar events.
+  await syncBookingToCalendar(bookingId)
 }
 
 // Notify the customer of any newly-generated access codes via email + SMS
