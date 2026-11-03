@@ -108,8 +108,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url })
   } catch (error) {
     console.error("Shop checkout error:", error)
+    // TEMPORARY diagnostics: surface Stripe's error type/code so a failing
+    // production checkout can be identified from the browser. Remove once fixed.
+    const e = error as { type?: string; code?: string; message?: string }
     return NextResponse.json(
-      { error: "Could not start checkout. Please try again." },
+      {
+        error: "Could not start checkout. Please try again.",
+        debug: { type: e.type, code: e.code, message: e.message },
+      },
       { status: 500 }
     )
   }
