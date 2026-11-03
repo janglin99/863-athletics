@@ -45,8 +45,15 @@ export async function POST(req: NextRequest) {
   }
   const isPickup = fulfillment === "pickup"
 
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin
+  // NEXT_PUBLIC_APP_URL may be unset or malformed (Stripe rejects bad URLs),
+  // so only trust it when it parses as an http(s) URL.
+  const origin = (() => {
+    try {
+      const u = new URL((process.env.NEXT_PUBLIC_APP_URL ?? "").trim())
+      if (u.protocol === "https:" || u.protocol === "http:") return u.origin
+    } catch {}
+    return new URL(req.url).origin
+  })()
 
   try {
     const session = await getStripeServer().checkout.sessions.create({
@@ -108,14 +115,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url })
   } catch (error) {
     console.error("Shop checkout error:", error)
-    // TEMPORARY diagnostics: surface Stripe's error type/code so a failing
-    // production checkout can be identified from the browser. Remove once fixed.
-    const e = error as { type?: string; code?: string; message?: string }
     return NextResponse.json(
-      {
-        error: "Could not start checkout. Please try again.",
-        debug: { type: e.type, code: e.code, message: e.message },
-      },
+      { error: "Could not start checkout. Please try again." },
       { status: 500 }
     )
   }
