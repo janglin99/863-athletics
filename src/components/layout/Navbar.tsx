@@ -27,6 +27,7 @@ export function Navbar() {
   }, [])
 
   return (
+    <>
     <nav
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
@@ -93,10 +94,13 @@ export function Navbar() {
           </button>
         </div>
       </div>
+    </nav>
 
-      {/* Mobile menu */}
+      {/* Mobile menu. Rendered outside <nav>: the scrolled navbar's
+          backdrop-blur makes it the containing block for fixed children,
+          which would shrink this panel to the header bar. */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 top-16 bg-bg-primary z-40">
+        <div className="md:hidden fixed inset-0 top-16 bg-bg-primary z-40 overflow-y-auto">
           <div className="flex flex-col items-center pt-12 gap-6">
             {navLinks.map((link) => (
               <Link
@@ -131,6 +135,6 @@ export function Navbar() {
           </div>
         </div>
       )}
-    </nav>
+  </>
   )
 }
