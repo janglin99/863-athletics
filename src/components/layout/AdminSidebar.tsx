@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Shirt,
+  Package,
   LayoutDashboard,
   ClipboardList,
   Users,
@@ -36,6 +37,7 @@ const links = [
   { href: "/admin/rates", label: "Rates & Pricing", icon: Settings },
   { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag },
   { href: "/admin/shop", label: "Shop", icon: Shirt },
+  { href: "/admin/orders", label: "Orders", icon: Package },
   { href: "/admin/reschedule-fees", label: "Reschedule Fees", icon: RefreshCw },
   { href: "/admin/payments", label: "Payments", icon: DollarSign },
   { href: "/admin/access-codes", label: "Access Codes", icon: Key },
