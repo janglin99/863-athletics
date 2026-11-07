@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { createClient } from "@/lib/supabase/server"
+import { requireShopAccess } from "@/lib/shop/auth"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import {
   MAX_DESCRIPTION_LENGTH,
   MAX_PICKUP_ADDRESS_LENGTH,
@@ -17,26 +18,8 @@ import {
   getShopConfig,
 } from "@/lib/shop/config"
 
-async function requireAdmin() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: "Unauthorized", status: 401 as const }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single()
-  if (profile?.role !== "admin") {
-    return { error: "Forbidden", status: 403 as const }
-  }
-  return { supabase }
-}
-
 export async function GET() {
-  const auth = await requireAdmin()
+  const auth = await requireShopAccess()
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
@@ -63,7 +46,7 @@ const saveSchema = z.object({
 })
 
 export async function PUT(req: NextRequest) {
-  const auth = await requireAdmin()
+  const auth = await requireShopAccess()
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
@@ -115,7 +98,9 @@ export async function PUT(req: NextRequest) {
     },
   ].map((r) => ({ ...r, updated_at: now }))
 
-  const { error } = await auth.supabase
+  // Service role: shop managers can't write admin_settings under RLS, and
+  // access was already verified above.
+  const { error } = await getSupabaseAdmin()
     .from("admin_settings")
     .upsert(rows, { onConflict: "key" })
   if (error) {

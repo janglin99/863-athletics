@@ -94,7 +94,7 @@ export default function AdminCustomersPage() {
                         variant="outline"
                         className="capitalize text-xs border-border"
                       >
-                        {customer.role}
+                        {customer.role.replace("_", " ")}
                       </Badge>
                       <span className="text-xs text-text-muted">
                         {formatDateTime(customer.created_at)}

@@ -41,7 +41,9 @@ const adminLinks = [
   { href: "/admin/notifications", label: "Notifications", icon: Bell },
 ]
 
-export function AdminMobileNav() {
+const SHOP_HREFS = ["/admin/shop", "/admin/orders"]
+
+export function AdminMobileNav({ shopOnly = false }: { shopOnly?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -74,7 +76,9 @@ export function AdminMobileNav() {
       {menuOpen && (
         <div className="lg:hidden fixed inset-0 top-[52px] bg-bg-primary z-40 overflow-y-auto">
           <nav className="flex flex-col p-4 gap-1">
-            {adminLinks.map((link) => {
+            {adminLinks
+              .filter((l) => !shopOnly || SHOP_HREFS.includes(l.href))
+              .map((link) => {
               const isActive = link.exact
                 ? pathname === link.href
                 : pathname.startsWith(link.href)

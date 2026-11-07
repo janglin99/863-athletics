@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr"
 
 const PORTAL_ROUTES = ["/dashboard", "/book", "/bookings", "/profile", "/payments"]
 const ADMIN_ROUTES = ["/admin"]
+const SHOP_MANAGER_ROUTES = ["/admin/shop", "/admin/orders"]
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -58,8 +59,21 @@ export async function middleware(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "staff"].includes(profile.role)) {
+    if (
+      !profile ||
+      !["admin", "staff", "shop_manager"].includes(profile.role)
+    ) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
+
+    // Shop managers may only use the shop and orders pages.
+    if (
+      profile.role === "shop_manager" &&
+      !SHOP_MANAGER_ROUTES.some(
+        (r) => pathname === r || pathname.startsWith(`${r}/`)
+      )
+    ) {
+      return NextResponse.redirect(new URL("/admin/orders", request.url))
     }
   }
 

@@ -316,6 +316,7 @@ export default function AdminCustomerDetailPage() {
     customer: "bg-text-secondary/10 text-text-secondary border-text-secondary/30",
     trainer: "bg-brand-steel/10 text-brand-steel border-brand-steel/30",
     staff: "bg-warning/10 text-warning border-warning/30",
+    shop_manager: "bg-brand-steel/10 text-brand-steel border-brand-steel/30",
     admin: "bg-brand-orange/10 text-brand-orange border-brand-orange/30",
   }
 
@@ -379,7 +380,7 @@ export default function AdminCustomerDetailPage() {
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-text-muted" />
               <Badge variant="outline" className={roleBadgeColor[customer.role] || ""}>
-                {customer.role}
+                {customer.role.replace("_", " ")}
                 {customer.role === "trainer" && customer.trainer_type && (
                   <span className="ml-1">({customer.trainer_type.replace("_", "-")})</span>
                 )}
@@ -409,6 +410,7 @@ export default function AdminCustomerDetailPage() {
                         <SelectItem value="customer">Customer</SelectItem>
                         <SelectItem value="trainer">Trainer</SelectItem>
                         <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="shop_manager">Shop Manager (shop &amp; orders only)</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
                       </SelectContent>
                     </Select>

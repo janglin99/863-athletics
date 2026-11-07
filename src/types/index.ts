@@ -6,7 +6,7 @@ export interface Profile {
   phone: string | null
   phone_verified: boolean
   avatar_url: string | null
-  role: "customer" | "trainer" | "staff" | "admin"
+  role: "customer" | "trainer" | "staff" | "admin" | "shop_manager"
   trainer_specialties: string[] | null
   bio: string | null
   emergency_name: string | null

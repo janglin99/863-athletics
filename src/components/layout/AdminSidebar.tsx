@@ -46,7 +46,9 @@ const links = [
   { href: "/admin/settings", label: "Settings", icon: Wrench },
 ]
 
-export function AdminSidebar() {
+const SHOP_HREFS = ["/admin/shop", "/admin/orders"]
+
+export function AdminSidebar({ shopOnly = false }: { shopOnly?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -66,7 +68,9 @@ export function AdminSidebar() {
       </div>
 
       <nav className="flex flex-col gap-1 flex-1">
-        {links.map((link) => {
+        {links
+          .filter((l) => !shopOnly || SHOP_HREFS.includes(l.href))
+          .map((link) => {
           const isActive = link.exact
             ? pathname === link.href
             : pathname.startsWith(link.href)

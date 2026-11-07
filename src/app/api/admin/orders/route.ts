@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type Stripe from "stripe"
-import { createClient } from "@/lib/supabase/server"
+import { requireShopAccess } from "@/lib/shop/auth"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { getStripeServer } from "@/lib/stripe/server"
 import { SHIRT } from "@/lib/shop/products"
 
@@ -23,24 +24,7 @@ export interface ShopOrder {
   totalCents: number
   refunded: boolean
   paymentIntentId: string | null
-}
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: "Unauthorized", status: 401 as const }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single()
-  if (profile?.role !== "admin") {
-    return { error: "Forbidden", status: 403 as const }
-  }
-  return { ok: true as const }
+  fulfilledAt: string | null
 }
 
 function formatAddress(a: Stripe.Address | null | undefined) {
@@ -57,7 +41,7 @@ function formatAddress(a: Stripe.Address | null | undefined) {
 // Shop orders aren't stored in our database; Stripe is the source of truth.
 // We list recent Checkout Sessions and keep the paid ones for the shirt.
 export async function GET() {
-  const auth = await requireAdmin()
+  const auth = await requireShopAccess()
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
@@ -107,8 +91,21 @@ export async function GET() {
         totalCents: total,
         refunded: !!charge && charge.refunded,
         paymentIntentId: pi?.id ?? null,
+        fulfilledAt: null,
       })
     }
+
+    const { data: done } = await getSupabaseAdmin()
+      .from("shop_order_fulfillment")
+      .select("session_id, fulfilled_at")
+      .in(
+        "session_id",
+        orders.map((o) => o.id)
+      )
+    const fulfilledAt = new Map(
+      (done ?? []).map((d) => [d.session_id, d.fulfilled_at as string])
+    )
+    for (const o of orders) o.fulfilledAt = fulfilledAt.get(o.id) ?? null
 
     return NextResponse.json({ orders })
   } catch (error) {
