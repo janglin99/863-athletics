@@ -17,14 +17,14 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const next = searchParams.get("next") || "/dashboard"
+  const requestedNext = searchParams.get("next")
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -36,6 +36,19 @@ function LoginForm() {
     }
 
     toast.success("Welcome back!")
+
+    // Shop managers go straight to Orders unless they were sent here from
+    // a specific page.
+    let next = requestedNext || "/dashboard"
+    if (!requestedNext && data.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single()
+      if (profile?.role === "shop_manager") next = "/admin/orders"
+    }
+
     router.push(next)
     router.refresh()
   }

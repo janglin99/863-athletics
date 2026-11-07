@@ -13,6 +13,7 @@ import {
   Dumbbell,
   Shield,
   FileText,
+  Package,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -30,6 +31,7 @@ export function PortalSidebar() {
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
   const [isTrainer, setIsTrainer] = useState(false)
+  const [isShopManager, setIsShopManager] = useState(false)
 
   useEffect(() => {
     async function checkRole() {
@@ -47,6 +49,9 @@ export function PortalSidebar() {
 
       if (profile && ["admin", "staff"].includes(profile.role)) {
         setIsAdmin(true)
+      }
+      if (profile && profile.role === "shop_manager") {
+        setIsShopManager(true)
       }
       if (profile && profile.role === "trainer") {
         setIsTrainer(true)
@@ -113,6 +118,15 @@ export function PortalSidebar() {
           >
             <Shield className="h-5 w-5" />
             Admin Portal
+          </Link>
+        )}
+        {isShopManager && (
+          <Link
+            href="/admin/orders"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+          >
+            <Package className="h-5 w-5" />
+            Shop &amp; Orders
           </Link>
         )}
         <button

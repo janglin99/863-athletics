@@ -12,6 +12,7 @@ import {
   UserCircle,
   Shield,
   FileText,
+  Package,
   LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -35,6 +36,7 @@ export function MobileNav() {
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
   const [isTrainer, setIsTrainer] = useState(false)
+  const [isShopManager, setIsShopManager] = useState(false)
   const [userName, setUserName] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -58,6 +60,7 @@ export function MobileNav() {
 
       if (["admin", "staff"].includes(profile.role)) setIsAdmin(true)
       if (profile.role === "trainer") setIsTrainer(true)
+      if (profile.role === "shop_manager") setIsShopManager(true)
 
       const fullName = [profile.first_name, profile.last_name]
         .filter(Boolean)
@@ -153,6 +156,16 @@ export function MobileNav() {
               >
                 <Shield className="h-5 w-5" />
                 Admin Portal
+              </Link>
+            )}
+            {isShopManager && (
+              <Link
+                href="/admin/orders"
+                onClick={closeMenu}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+              >
+                <Package className="h-5 w-5" />
+                Shop &amp; Orders
               </Link>
             )}
             {isTrainer && (
