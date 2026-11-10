@@ -22,6 +22,16 @@ export function ShirtPurchase({
   const [error, setError] = useState<string | null>(null)
 
   const size = sizes.find((s) => s.code === sizeCode) ?? null
+
+  // Group sizes under their heading, in the order the groups first appear.
+  const groups: { name: string; sizes: typeof sizes }[] = []
+  for (const s of sizes) {
+    const name = s.group ?? ""
+    const g = groups.find((x) => x.name === name)
+    if (g) g.sizes.push(s)
+    else groups.push({ name, sizes: [s] })
+  }
+  const showHeadings = groups.length > 1
   const subtotal = size ? size.priceCents * quantity : 0
   const isPickup = fulfillment === "pickup"
   const deliveryCents = isPickup ? 0 : shippingCents
@@ -54,8 +64,13 @@ export function ShirtPurchase({
         <legend className={styles.label}>
           Size {size && <span className={styles.labelValue}>— {size.label}</span>}
         </legend>
-        <div className={styles.sizeGrid}>
-          {sizes.map((s) => (
+        {groups.map((g) => (
+          <div key={g.name} className={styles.sizeGroup}>
+            {showHeadings && g.name && (
+              <p className={styles.groupTitle}>{g.name}</p>
+            )}
+            <div className={styles.sizeGrid}>
+          {g.sizes.map((s) => (
             <label key={s.code} className={styles.sizeOption}>
               <input
                 disabled={s.soldOut}
@@ -74,7 +89,9 @@ export function ShirtPurchase({
               </span>
             </label>
           ))}
-        </div>
+            </div>
+          </div>
+        ))}
       </fieldset>
 
       {shippingEnabled && pickupEnabled && (

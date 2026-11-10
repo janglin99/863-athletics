@@ -22,6 +22,9 @@ import {
 
 export interface ShopSize extends ShirtSize {
   soldOut: boolean
+  // Optional heading the size is listed under on the shop page (e.g. Youth,
+  // Adult). Headings only show when sizes span more than one group.
+  group?: string
 }
 
 export interface ShopConfig {
@@ -94,6 +97,9 @@ function parseSizes(raw: string | undefined): ShopSize[] | null {
         label: typeof s.label === "string" && s.label ? s.label : s.code,
         priceCents: s.priceCents,
         soldOut: s.soldOut === true,
+        ...(typeof s.group === "string" && s.group.trim()
+          ? { group: s.group.trim() }
+          : {}),
       })
     }
     return sizes

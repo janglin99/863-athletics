@@ -4,6 +4,7 @@ import { requireShopAccess } from "@/lib/shop/auth"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import {
   MAX_DESCRIPTION_LENGTH,
+  MAX_GROUP_LENGTH,
   MAX_PICKUP_ADDRESS_LENGTH,
   MAX_SIZES,
   SIZE_CODE_PATTERN,
@@ -37,6 +38,7 @@ const saveSchema = z.object({
       z.object({
         code: z.string().trim().regex(SIZE_CODE_PATTERN),
         label: z.string().trim().max(40),
+        group: z.string().trim().max(MAX_GROUP_LENGTH).optional(),
         priceCents: z.number().int().min(100).max(100_000),
         soldOut: z.boolean(),
       })

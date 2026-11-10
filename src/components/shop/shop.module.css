@@ -103,6 +103,15 @@
 
 .sizes { border: 0; padding: 0; margin: 0 0 1.5rem; min-width: 0; }
 .sizes legend { padding: 0; margin-bottom: 0.75rem; }
+.sizeGroup + .sizeGroup { margin-top: 1rem; }
+.groupTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--green-bright);
+}
 .sizeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr)); gap: 0.6rem; }
 
 .sizeOption { position: relative; cursor: pointer; }

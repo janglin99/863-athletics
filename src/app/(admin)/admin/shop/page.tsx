@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
   MAX_DESCRIPTION_LENGTH,
+  MAX_GROUP_LENGTH,
   MAX_PICKUP_ADDRESS_LENGTH,
   MAX_SIZES,
   SIZE_CODE_PATTERN,
@@ -25,6 +26,7 @@ const toCents = (dollars: string) => Math.round(parseFloat(dollars) * 100)
 interface Row {
   code: string
   label: string
+  group: string
   price: string
   soldOut: boolean
 }
@@ -44,6 +46,7 @@ export default function AdminShopPage() {
       config.sizes.map((s) => ({
         code: s.code,
         label: s.label,
+        group: s.group ?? "",
         price: toDollars(s.priceCents),
         soldOut: s.soldOut,
       }))
@@ -73,13 +76,20 @@ export default function AdminShopPage() {
   const add = () =>
     setRows((rs) => [
       ...rs,
-      { code: "", label: "", price: rs.at(-1)?.price ?? "30.00", soldOut: false },
+      {
+        code: "",
+        label: "",
+        group: rs.at(-1)?.group ?? "",
+        price: rs.at(-1)?.price ?? "30.00",
+        soldOut: false,
+      },
     ])
 
   async function save() {
     const sizes = rows.map((r) => ({
       code: r.code.trim(),
       label: r.label.trim(),
+      group: r.group.trim(),
       priceCents: toCents(r.price),
       soldOut: r.soldOut,
     }))
@@ -191,12 +201,15 @@ export default function AdminShopPage() {
             <p className="text-sm text-text-secondary">
               Sizes appear on the shop page in this order. The code is the short
               text on the button (S, XL, Youth M); the name is the longer
-              description shown once selected.
+              description shown once selected. Give sizes a group (Youth,
+              Adult) to list them under separate headings; keep the sizes in each
+              group together.
             </p>
             <div className="divide-y divide-border">
-              <div className="hidden sm:grid grid-cols-[5.5rem_1fr_8rem_4.5rem_2rem] gap-3 pb-2 text-xs uppercase tracking-wide text-text-muted">
+              <div className="hidden sm:grid grid-cols-[5.5rem_1fr_7rem_8rem_4.5rem_2rem] gap-3 pb-2 text-xs uppercase tracking-wide text-text-muted">
                 <span>Code</span>
                 <span>Name</span>
+                <span>Group</span>
                 <span>Price (USD)</span>
                 <span>Sold out</span>
                 <span />
@@ -204,7 +217,7 @@ export default function AdminShopPage() {
               {rows.map((r, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-[5.5rem_1fr] sm:grid-cols-[5.5rem_1fr_8rem_4.5rem_2rem] items-center gap-3 py-3"
+                  className="grid grid-cols-[5.5rem_1fr] sm:grid-cols-[5.5rem_1fr_7rem_8rem_4.5rem_2rem] items-center gap-3 py-3"
                 >
                   <Input
                     aria-label={`Size ${i + 1} code`}
@@ -220,6 +233,14 @@ export default function AdminShopPage() {
                     maxLength={40}
                     value={r.label}
                     onChange={(e) => update(i, { label: e.target.value })}
+                    className="bg-bg-elevated border-border"
+                  />
+                  <Input
+                    aria-label={`Size ${i + 1} group`}
+                    placeholder="Adult"
+                    maxLength={MAX_GROUP_LENGTH}
+                    value={r.group}
+                    onChange={(e) => update(i, { group: e.target.value })}
                     className="bg-bg-elevated border-border"
                   />
                   <div className="relative">

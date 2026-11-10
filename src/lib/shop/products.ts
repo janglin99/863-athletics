@@ -33,5 +33,6 @@ export const MAX_PICKUP_ADDRESS_LENGTH = 300
 export const MAX_QUANTITY = 10
 export const MAX_DESCRIPTION_LENGTH = 500
 export const MAX_SIZES = 20
+export const MAX_GROUP_LENGTH = 20
 // Size codes are shown on buttons and in emails/Stripe, so keep them short.
 export const SIZE_CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 ./-]{0,11}$/
